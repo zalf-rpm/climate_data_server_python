@@ -1,11 +1,16 @@
+import time
 import capnp
-import climate_data_capnp
+#import climate_data_capnp
+capnp.remove_import_hook()
+climate_data_capnp = capnp.load("capnproto_schemas/climate_data.capnp")
 
 def main():
     #address = parse_args().address
 
+    rust_client = capnp.TwoPartyClient("localhost:4000")
     client = capnp.TwoPartyClient("localhost:8000")
 
+    rust_climate_service = rust_client.bootstrap().cast_as(climate_data_capnp.Climate.DataService)
     climate_service = client.bootstrap().cast_as(climate_data_capnp.Climate.DataService)
 
     sims_prom = climate_service.simulations_request().send()
@@ -56,6 +61,19 @@ def main():
                 #print(data)
 
 
+    
+    models = rust_climate_service.models().wait().models
+    if len(models) > 0:
+        model = models[0]
+        #req = model.run_request()
+        #req.data = ts
+        #result = req.send().wait().result
+        tavg_ts = ts.subheader(["tavg"]).wait().timeSeries
+        start_time = time.perf_counter()
+        result = model.run(tavg_ts).wait().result
+        end_time = time.perf_counter()
+        print("rust:", result, "time:", (end_time - start_time), "s")
+        
 
     models = climate_service.models().wait().models
     if len(models) > 0:
@@ -64,10 +82,10 @@ def main():
         #req.data = ts
         #result = req.send().wait().result
         tavg_ts = ts.subheader(["tavg"]).wait().timeSeries
+        start_time = time.perf_counter()
         result = model.run(tavg_ts).wait().result
-
-
-    print(result)
+        end_time = time.perf_counter()
+        print("python:", result, "time:", (end_time - start_time), "s")
 
     #text_prom = data_services.getText_request().send()
     #text = text_prom.wait()

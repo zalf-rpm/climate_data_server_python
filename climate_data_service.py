@@ -10,9 +10,11 @@ import time
 
 #import argparse
 import capnp
+#import climate_data_capnp
 capnp.remove_import_hook()
 climate_data_capnp = capnp.load('capnproto_schemas/climate_data.capnp')
-#import climate_data_capnp
+model_capnp = capnp.load('capnproto_schemas/model.capnp')
+common_capnp = capnp.load('capnproto_schemas/common.capnp')
 
 def read_header(path_to_ascii_grid_file):
     "read metadata from esri ascii grid file"
@@ -138,7 +140,7 @@ class Isimip_CSV_Station(climate_data_capnp.Climate.Station.Server):
         self.geo_coord = geo_coord
 
     def info(self):
-        return climate_data_capnp.Climate.IdInformation.new_message(id=self.id, name=self.name, description=self.description) 
+        return common_capnp.Common.IdInformation.new_message(id=self.id, name=self.name, description=self.description) 
 
     def info_context(self, context): # -> (info :IdInformation);
         context.results.info = self.info()
@@ -209,10 +211,10 @@ class Isimip_CSV_TimeSeries(climate_data_capnp.Climate.TimeSeries.Server):
         return self._df.columns.tolist()
 
     def data(self, **kwargs): # () -> (data :List(List(Float32)));
-        #start_time = time.clock()
         return self._df.to_numpy().tolist()
-        #end_time = time.clock()
-        #print("reformating data took:", (end_time - start_time), "s")
+
+    def dataT(self, **kwargs): # () -> (data :List(List(Float32)));
+        return self._df.T.to_numpy().tolist()
                 
     def subrange_context(self, context): # (from :Date, to :Date) -> (timeSeries :TimeSeries);
         from_date = create_date(getattr(context.params, "from"))
@@ -257,7 +259,7 @@ class Isimip_CSV_Simulation(climate_data_capnp.Climate.Simulation.Server):
         
 
     def info(self):
-        return climate_data_capnp.Climate.IdInformation.new_message(id=self._id, name=self._name, description=self._description) 
+        return common_capnp.Common.IdInformation.new_message(id=self._id, name=self._name, description=self._description) 
 
     def info_context(self, context): # -> (info :IdInformation);
         context.results.info = self.info()
@@ -311,7 +313,7 @@ class Isimip_CSV_Scenario(climate_data_capnp.Climate.Scenario.Server):
         self._path_to_scen_dir = path_to_scen_dir
 
     def info(self):
-        return climate_data_capnp.Climate.IdInformation.new_message(id=self._id, name=self._name, description=self._description) 
+        return common_capnp.Common.IdInformation.new_message(id=self._id, name=self._name, description=self._description) 
 
     def info_context(self, context): # -> (info :IdInformation);
         context.results.info = self.info()
@@ -355,7 +357,7 @@ class Isimip_CSV_Realization(climate_data_capnp.Climate.Realization.Server):
         self._description = description if description else ""
 
     def info(self):
-        return climate_data_capnp.Climate.IdInformation.new_message(id=self._id, name=self._name, description=self._description) 
+        return common_capnp.Common.IdInformation.new_message(id=self._id, name=self._name, description=self._description) 
 
     def info_context(self, context): # -> (info :IdInformation);
         context.results.info = self.info()
@@ -397,7 +399,7 @@ class Isimip_CSV_Realization(climate_data_capnp.Climate.Realization.Server):
 
 
 
-class YearlyTavg(climate_data_capnp.Climate.Model.Server):
+class YearlyTavg(model_capnp.Model.Instance.Server):
 
     def __init__(self):
         pass
