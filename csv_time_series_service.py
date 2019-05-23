@@ -49,9 +49,11 @@ class CSV_TimeSeries(climate_data_capnp.Climate.TimeSeries.Server):
         return self._df.columns.tolist()
 
     def data(self, **kwargs): # () -> (data :List(List(Float32)));
+        print("data requested")
         return self._df.to_numpy().tolist()
 
     def dataT(self, **kwargs): # () -> (data :List(List(Float32)));
+        print("dataT requested")
         return self._df.T.to_numpy().tolist()
                 
     def subrange_context(self, context): # (from :Date, to :Date) -> (timeSeries :TimeSeries);
@@ -71,19 +73,6 @@ class CSV_TimeSeries(climate_data_capnp.Climate.TimeSeries.Server):
         context.results.timeSeries = CSV_TimeSeries( \
             dataframe=sub_df, headers=sub_headers, \
             start_date=self._start_date, end_date=self._end_date)
-        
-        
-    def simulationInfo_context(self, context): # -> (simInfo :IdInformation);
-        pass
-        #context.results.simInfo = self._real.scenario.simulation.info()
-
-    def scenarioInfo_context(self, context): # -> (scenInfo :IdInformation);
-        pass
-        #context.results.scenInfo = self._real.scenario.info()
-    
-    def realizationInfo_context(self, context): # -> (realInfo :IdInformation);
-        pass
-        #context.results.realInfo = self._real.info()
 
 def main():
 
@@ -99,7 +88,6 @@ def main():
             if k in config:
                 config[k] = v
 
-    #server = capnp.TwoPartyServer("*:8000", bootstrap=DataServiceImpl("/home/berg/archive/data/"))
     server = capnp.TwoPartyServer(config["server"] + ":" + config["port"], bootstrap=CSV_TimeSeries(path_to_csv_file=config["path_to_csv_file"]))
     server.run_forever()
 

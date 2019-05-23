@@ -8,7 +8,6 @@ from pyproj import Proj, transform
 import json
 import time
 
-#import argparse
 import capnp
 #import climate_data_capnp
 capnp.remove_import_hook()
@@ -234,16 +233,6 @@ class Isimip_CSV_TimeSeries(climate_data_capnp.Climate.TimeSeries.Server):
             self._real, sub_df, headers=sub_headers, \
             start_date=self._start_date, end_date=self._end_date)
         
-        
-    def simulationInfo_context(self, context): # -> (simInfo :IdInformation);
-        context.results.simInfo = self._real.scenario.simulation.info()
-
-    def scenarioInfo_context(self, context): # -> (scenInfo :IdInformation);
-        context.results.scenInfo = self._real.scenario.info()
-    
-    def realizationInfo_context(self, context): # -> (realInfo :IdInformation);
-        context.results.realInfo = self._real.info()
-  
 
 
 class Isimip_CSV_Simulation(climate_data_capnp.Climate.Simulation.Server): 
@@ -399,7 +388,7 @@ class Isimip_CSV_Realization(climate_data_capnp.Climate.Realization.Server):
 
 
 
-class YearlyTavg(model_capnp.Model.Instance.Server):
+class YearlyTavg(model_capnp.Model.ClimateInstance.Server):
 
     def __init__(self):
         pass

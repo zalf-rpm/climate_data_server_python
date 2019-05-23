@@ -36,11 +36,11 @@ def main():
                 ts = ts_p.wait().timeSeries
 
                 ts.range().then(lambda r: print(r)).wait()
-                ts.realizationInfo().then(lambda r: print(r.realInfo)).wait()
-                ts.scenarioInfo().then(lambda r: print(r.scenInfo)).wait()
-                ts.simulationInfo().then(lambda r: print(r.simInfo)).wait()
+                #ts.realizationInfo().then(lambda r: print(r.realInfo)).wait()
+                #ts.scenarioInfo().then(lambda r: print(r.scenInfo)).wait()
+                #ts.simulationInfo().then(lambda r: print(r.simInfo)).wait()
 
-                data_p = ts.data()
+                #data_p = ts.data()
                 #data_p = data_p.then(lambda d: print(d.data))
 
                 #sub_ts_p = ts.subrange({"year": 2010, "month": 1, "day": 1}, {"year": 2011, "month": 1, "day": 15})
