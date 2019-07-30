@@ -8,6 +8,7 @@ from datetime import date, timedelta
 import json
 import time
 import uuid
+import subprocess
 
 import capnp
 #import climate_data_capnp
@@ -22,17 +23,32 @@ class SlurmMonicaInstanceFactory(cluster_admin_service_capnp.Cluster.ModelInstan
 
     def __init__(self):
         self._uuid4 = uuid.uuid4()
+        self._registry = {}
 
-    def modelId_context(self, context): # modelId @4 () -> (id :Text);
+    def register(self, obj, registrationToken, _context, **kwargs): # register @0 [Object] (object :Object, registrationToken :Text = "") -> (unregister :Unregister);
+        if registrationToken in self._registry:
+            self._registry[registrationToken] = obj
+            
+
+        
+
+        pass
+
+    def modelId(self, _context, **kwargs): # modelId @4 () -> (id :Text);
         "# return the id of the model this factory creates instances of"
         return "monica_v2.1"
-
-    def info_context(self, context): # info @0 () -> (info :IdInformation);
+        
+    def info(self, _context, **kwargs): # info @0 () -> (info :IdInformation);
         # interface to retrieve id information from an object
         return {"id": str(self._uuid4), "name": "SlurmMonicaInstanceFactory(" + str(self._uuid4) + ")", "description": ""}
 
-    def newInstance_context(self, context): # newInstance @0 () -> (instance :AnyPointer);
+    def newInstance(self, _context, **kwargs): # newInstance @0 () -> (instance :AnyPointer);
         "# return a new instance of the model"
+
+        subprocess.Popen(["monica-capnp-server", ""])
+
+
+
         pass
 
     def newInstances_context(self, context): # newInstances @1 (numberOfInstances :Int16) -> (instances :AnyList);
@@ -50,8 +66,27 @@ class SlurmMonicaInstanceFactory(cluster_admin_service_capnp.Cluster.ModelInstan
 def main():
     #address = parse_args().address
 
+    runtime_available = False
+    while not runtime_available:
+        try:
+            runtime = capnp.TwoPartyClient("localhost:9000").bootstrap().cast_as(cluster_admin_service_capnp.Cluster.Runtime)
+            runtime_available = True
+        except:
+            #time.sleep(1)
+            pass
+
+    monicaFactory = SlurmMonicaInstanceFactory()
+    registered_factory = False
+    while not registered_factory:
+        try:
+            unreg = runtime.registerModelInstanceFactory("monica_v2.1", monicaFactory).wait().unregister
+            registered_factory = True
+        except capnp.KjException as e:
+            print(e)
+            time.sleep(1)
+
     #server = capnp.TwoPartyServer("*:8000", bootstrap=DataServiceImpl("/home/berg/archive/data/"))
-    server = capnp.TwoPartyServer("*:8000", bootstrap=SlurmMonicaInstanceFactory())
+    server = capnp.TwoPartyServer("*:10000", bootstrap=monicaFactory)
     server.run_forever()
 
 if __name__ == '__main__':

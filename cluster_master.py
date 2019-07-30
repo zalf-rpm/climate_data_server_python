@@ -10,6 +10,8 @@ import time
 from collections import defaultdict
 import uuid
 
+import common
+
 import capnp
 #import climate_data_capnp
 capnp.remove_import_hook()
@@ -17,6 +19,7 @@ capnp.remove_import_hook()
 #model_capnp = capnp.load('capnproto_schemas/model.capnp')
 cluster_admin_service_capnp = capnp.load("capnproto_schemas/cluster_admin_service.capnp")
 common_capnp = capnp.load('capnproto_schemas/common.capnp')
+
 
 class AdminMasterImpl(cluster_admin_service_capnp.Cluster.AdminMaster.Server):
     "Implementation of the Cluster.AdminMaster Cap'n Proto server interface."
@@ -29,18 +32,23 @@ class AdminMasterImpl(cluster_admin_service_capnp.Cluster.AdminMaster.Server):
         "# interface to retrieve id information from an object"
         return {"id": str(self._uuid4), "name": "AdminMaster(" + str(self._uuid4) + ")", "description": ""}
 
-    def registerModelInstanceFactory_context(self, context): # registerModelInstanceFactory @0 (aModelId :Text, aFactory :ModelInstanceFactory););
+    #def unregisterFactory(self, aModelId, aFactory):
+    #    self._factories[aModelId].remove(aFactory)
+
+    def registerModelInstanceFactory(self, aModelId, aFactory, _context, **kwargs): # registerModelInstanceFactory @0 (aModelId :Text, aFactory :ModelInstanceFactory) -> (unreg :Common.Unregister);
         "# register a model instance factory for the given model id"
-        self._factories[context.params.aModelId].append(context.params.aFactory)
+        self._factories[aModelId].append(aFactory)
+        return common.UnregisterImpl(lambda: self._factories[aModelId].remove(aFactory))
+        #return common.UnregisterImpl(self.unregisterFactory, aModelId, aFactory)
 
     def availableModels_context(self, context): # availableModels @1 () -> (factories :List(ModelInstanceFactory));
         "# get instance factories to all the available models on registered runtimes"
-        context.results.init("modelInfos", len(self._nodes))
+        context.results.init("factories", len(self._factories))
         fs = []
         for model_id, factories in self._factories.items():
             if len(factories) == 1:
                 fs.append(factories[0])
-            elif len(factories > 1):
+            elif len(factories) > 1:
                 fs.append(MultiRuntimeModelInstanceFactory(model_id, factories))
 
         context.results.factories = fs
@@ -67,6 +75,10 @@ class MultiRuntimeModelInstanceFactory(cluster_admin_service_capnp.Cluster.Model
         self._model_id = model_id
         self._factories = factories
         self._uuid4 = uuid.uuid4()
+
+    def modelId(self, _context, **kwargs): # modelId @4 () -> (id :Text);
+        "# return the id of the model this factory creates instances of"
+        return self._model_id
 
     def info_context(self, context): # info @0 () -> (info :IdInformation);
         # interface to retrieve id information from an object
@@ -96,7 +108,7 @@ def main():
     #address = parse_args().address
 
     #server = capnp.TwoPartyServer("*:8000", bootstrap=DataServiceImpl("/home/berg/archive/data/"))
-    server = capnp.TwoPartyServer("*:8000", bootstrap=UserMasterImpl(AdminMasterImpl()))
+    server = capnp.TwoPartyServer("*:8000", bootstrap=AdminMasterImpl()) #UserMasterImpl(AdminMasterImpl()))
     server.run_forever()
 
 if __name__ == '__main__':

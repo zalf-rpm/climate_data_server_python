@@ -9,6 +9,7 @@ import json
 import time
 import uuid
 
+import common
 import capnp
 #import climate_data_capnp
 capnp.remove_import_hook()
@@ -17,6 +18,8 @@ capnp.remove_import_hook()
 cluster_admin_service_capnp = capnp.load("capnproto_schemas/cluster_admin_service.capnp")
 #common_capnp = capnp.load('capnproto_schemas/common.capnp')
 
+def printBla(prom):
+    print("bla, ", prom)
 
 class SlurmRuntime(cluster_admin_service_capnp.Cluster.Runtime.Server):
 
@@ -26,14 +29,25 @@ class SlurmRuntime(cluster_admin_service_capnp.Cluster.Runtime.Server):
         self._used_cores = 0
         self._uuid4 = uuid.uuid4()
         self._factories = {}
+        self._unregs = {}
 
     def info_context(self, context): # info @0 () -> (info :IdInformation);
         # interface to retrieve id information from an object
         return {"id": str(self._uuid4), "name": "SlurmRuntime(" + str(self._uuid4) + ")", "description": ""}
 
-    def registerModelInstanceFactory_context(self, context): # registerModelInstanceFactory @0 (aModelId :Text, aFactory :ModelInstanceFactory);
+    def delFactory(self, aModelId):
+        # remove factor for given model id
+        del self._factories[aModelId]
+        
+        # unregister factory at admin_master 
+        del self._unregs[aModelId] # works because deleting object will just do the same as unregistering
+        #self._unregs.pop(aModelId).unregister()
+
+    def registerModelInstanceFactory(self, aModelId, aFactory, _context, **kwargs): # registerModelInstanceFactory @0 (aModelId :Text, aFactory :ModelInstanceFactory) -> (unreg :Common.Unregister);
         "register a model instance factory for the given model id"
-        self._factories[context.params.aModelId] = context.params.aFactory
+        self._factories[aModelId] = aFactory
+        self._unregs[aModelId] = self._admin_master.registerModelInstanceFactory(aModelId, aFactory).unregister
+        return common.CallbackImpl(self.delFactory, aModelId, exec_callback_on_del=True)
 
     def availableModels_context(self, context): # availableModels @1 () -> (factories :List(ModelInstanceFactory));
         "# the model instance factories this runtime has access to"
@@ -54,10 +68,29 @@ class SlurmRuntime(cluster_admin_service_capnp.Cluster.Runtime.Server):
 def main():
     #address = parse_args().address
 
-    admin_master = capnp.TwoPartyClient("localhost:8000").bootstrap().cast_as(cluster_admin_service_capnp.Cluster.AdminMaster)
+    master_available = False
+    while not master_available:
+        try:
+            admin_master = capnp.TwoPartyClient("localhost:8000").bootstrap().cast_as(cluster_admin_service_capnp.Cluster.AdminMaster)
+            master_available = True
+        except:
+            #time.sleep(1)
+            pass
+
+    
+    #runtime = SlurmRuntime(cores=4, admin_master=admin_master)
+    #registered_ = False
+    #while not registered_factory:
+    #    try:
+    #        runtime.registerModelInstanceFactory("monica_v2.1", monicaFactory).wait()
+    #        registered_factory = True
+    #    except:
+    #        time.sleep(1)
+    #        pass
+
 
     #server = capnp.TwoPartyServer("*:8000", bootstrap=DataServiceImpl("/home/berg/archive/data/"))
-    server = capnp.TwoPartyServer("*:8000", bootstrap=SlurmRuntime(cores=4, admin_master=admin_master))
+    server = capnp.TwoPartyServer("*:9000", bootstrap=SlurmRuntime(cores=4, admin_master=admin_master))
     server.run_forever()
 
 if __name__ == '__main__':
