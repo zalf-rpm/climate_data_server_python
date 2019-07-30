@@ -25,9 +25,10 @@ class SlurmMonicaInstanceFactory(cluster_admin_service_capnp.Cluster.ModelInstan
         self._uuid4 = uuid.uuid4()
         self._registry = {}
 
-    def register(self, obj, registrationToken, _context, **kwargs): # register @0 [Object] (object :Object, registrationToken :Text = "") -> (unregister :Unregister);
+    # registerModelInstance @5 [ModelInstance] (instance :ModelInstance, registrationToken :Text = "") -> (unregister :Common.Callback);
+    def registerModelInstance(self, instance, registrationToken, _context, **kwargs):
         if registrationToken in self._registry:
-            self._registry[registrationToken] = obj
+            self._registry[registrationToken] = instance
             
 
         
@@ -45,6 +46,7 @@ class SlurmMonicaInstanceFactory(cluster_admin_service_capnp.Cluster.ModelInstan
     def newInstance(self, _context, **kwargs): # newInstance @0 () -> (instance :AnyPointer);
         "# return a new instance of the model"
 
+        uid = uuid.uuid4()
         subprocess.Popen(["monica-capnp-server", ""])
 
 

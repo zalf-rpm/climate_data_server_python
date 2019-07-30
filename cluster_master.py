@@ -38,7 +38,7 @@ class AdminMasterImpl(cluster_admin_service_capnp.Cluster.AdminMaster.Server):
     def registerModelInstanceFactory(self, aModelId, aFactory, _context, **kwargs): # registerModelInstanceFactory @0 (aModelId :Text, aFactory :ModelInstanceFactory) -> (unreg :Common.Unregister);
         "# register a model instance factory for the given model id"
         self._factories[aModelId].append(aFactory)
-        return common.UnregisterImpl(lambda: self._factories[aModelId].remove(aFactory))
+        return common.CallbackImpl(lambda: self._factories[aModelId].remove(aFactory), exec_callback_on_del=True)
         #return common.UnregisterImpl(self.unregisterFactory, aModelId, aFactory)
 
     def availableModels_context(self, context): # availableModels @1 () -> (factories :List(ModelInstanceFactory));
