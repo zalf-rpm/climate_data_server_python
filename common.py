@@ -17,9 +17,10 @@ class CallbackImpl(common_capnp.Common.Callback.Server):
         self._kwargs = kwargs
         self._callback = callback
         self._already_called = False
+        self._exec_callback_on_del = exec_callback_on_del
 
     def __del__(self):
-        if exec_callback_on_del and not self._already_called:
+        if self._exec_callback_on_del and not self._already_called:
             self._callback(*self._args, **self._kwargs)
 
     def call(self, _context, **kwargs): # call @0 ();
