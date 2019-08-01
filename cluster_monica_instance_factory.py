@@ -23,31 +23,39 @@ common_capnp = capnp.load('capnproto_schemas/common.capnp')
 
 class SlurmMonicaInstanceFactory(cluster_admin_service_capnp.Cluster.ModelInstanceFactory.Server):
 
-    def __init__(self, port):
+    def __init__(self, config):
         self._uuid4 = uuid.uuid4()
-        self._registry = defaultdict(dict)
-        self._port = port
-        self._test = None
-
+        self._registry = defaultdict(lambda: {
+            "procs": [], 
+            "instance_caps": [], 
+            "unregister_caps": [],
+            "prom_fulfiller": capnp.PromiseFulfillerPair(), 
+            "fulfill_count": 0
+        })
+        self._port = config["port"]
+        self._path_to_monica_binaries = config["path_to_monica_binaries"]
 
     def __del__(self):
         for _, dic in self._registry.items():
-            dic["proc"].terminate()
+            for proc in dic["procs"]:
+                proc.terminate()
 
 
     # registerModelInstance @5 [ModelInstance] (instance :ModelInstance, registrationToken :Text = "") -> (unregister :Common.Callback);
-    def registerModelInstance(self, instance, registrationToken, _context, **kwargs):
-        if registrationToken in self._registry:
-            reg = self._registry[registrationToken]
-            reg["cap"] = instance 
-            reg["unreg"] = common.CallbackImpl(lambda: self._registry.pop(registrationToken, None), exec_callback_on_del=True)
-            reg["prom_fulfiller"].fulfill()
-            return reg["unreg"]
-        else:
-            reg = self._registry[registrationToken]
-            reg["cap"] = instance
-            reg["unreg"] = common.CallbackImpl(lambda: self._registry.pop(registrationToken, None), exec_callback_on_del=True)
-            return reg["unreg"]
+    def registerModelInstance_context(self, context):
+        """# register the given instance of some model optionally given the registration token and receive a
+        # callback to unregister this instance again"""
+
+        registration_token = context.params.registrationToken
+        if registration_token in self._registry:
+            reg = self._registry[registration_token]
+            reg["instance_caps"].append({"cap": context.params.instance})
+            unreg_cap = common.CallbackImpl(lambda: self._registry.pop(registration_token, None), exec_callback_on_del=True)
+            reg["unregister_caps"].append(unreg_cap)
+            reg["fulfill_count"] -= 1
+            if reg["fulfill_count"] == 0:
+                reg["prom_fulfiller"].fulfill()
+            context.results.unregister = unreg_cap
 
 
     def modelId(self, _context, **kwargs): # modelId @4 () -> (id :Text);
@@ -60,23 +68,31 @@ class SlurmMonicaInstanceFactory(cluster_admin_service_capnp.Cluster.ModelInstan
         return {"id": str(self._uuid4), "name": "SlurmMonicaInstanceFactory(" + str(self._uuid4) + ")", "description": ""}
 
 
-    def newInstance(self, _context, **kwargs): # newInstance @0 () -> (instance :AnyPointer);
+    def newInstance_context(self, context): # newInstance @0 () -> (instance :AnyPointer);
         "# return a new instance of the model"
 
-        registration_token = "1234" #uuid.uuid4()
-        monica = None #subprocess.Popen(["C:/Users/berg.ZALF-AD/GitHub/monica/_cmake_vs2019_win64/Debug/monica-capnp-server.exe", "-i", "-cf", "-fa", "localhost", "-fp", str(self._port), "-rt", str(registration_token)])
+        registration_token = str(uuid.uuid4())
+        monica = subprocess.Popen([self._path_to_monica_binaries + "monica-capnp-server.exe", "-i", "-cf", "-fa", "localhost", "-fp", str(self._port), "-rt", registration_token])
 
-        pfp = capnp.PromiseFulfillerPair()
-        if registration_token not in self._registry:
-            self._registry[registration_token] = {"proc": monica, "cap": None, "prom_fulfiller": pfp}
-            return pfp.promise#.then(lambda: self._registry[registration_token]["cap"])
-        else:
-            return self._registry[registration_token]["cap"]
+        reg = self._registry[registration_token]
+        reg["procs"] = [monica]
+        reg["fulfill_count"] = 1
+        return reg["prom_fulfiller"].promise.then(lambda: setattr(context.results, "instance", self._registry[registration_token]["instance_caps"][0]))
         
 
     def newInstances_context(self, context): # newInstances @1 (numberOfInstances :Int16) -> (instances :AnyList);
         "# return the requested number of model instances"
-        pass
+        registration_token = str(uuid.uuid4())
+        instance_count = context.params.numberOfInstances
+
+        procs = []
+        for i in range(instance_count):
+            procs.append(subprocess.Popen([self._path_to_monica_binaries + "monica-capnp-server.exe", "-i", "-cf", "-fa", "localhost", "-fp", str(self._port), "-rt", registration_token]))
+
+        reg = self._registry[registration_token]
+        reg["procs"] = procs
+        reg["fulfill_count"] = instance_count
+        return reg["prom_fulfiller"].promise.then(lambda: setattr(context.results, "instances", self._registry[registration_token]["instance_caps"]))
 
 
     def newCloudViaZmqPipelineProxies_context(self, context): # newCloudViaZmqPipelineProxies @2 (numberOfInstances :Int16) -> (zmqInputAddress :Text, zmqOutputAddress :Text);
@@ -101,7 +117,10 @@ def main():
             #time.sleep(1)
             pass
 
-    monicaFactory = SlurmMonicaInstanceFactory(10000)
+    monicaFactory = SlurmMonicaInstanceFactory({
+        "port": 10000,
+        "path_to_monica_binaries": "C:/Users/berg.ZALF-AD/GitHub/monica/_cmake_vs2019_win64/Debug/"
+    })
     registered_factory = False
     while not registered_factory:
         try:
