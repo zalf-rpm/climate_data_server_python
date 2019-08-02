@@ -26,7 +26,7 @@ class SlurmMonicaInstanceFactory(cluster_admin_service_capnp.Cluster.ModelInstan
     def __init__(self, config):
         self._uuid4 = uuid.uuid4()
         self._registry = defaultdict(lambda: {
-            "procs": [], 
+            "procs": {}, # map instance to processes 
             "instance_caps": [], 
             "unregister_caps": [],
             "prom_fulfiller": capnp.PromiseFulfillerPair(), 
@@ -38,7 +38,7 @@ class SlurmMonicaInstanceFactory(cluster_admin_service_capnp.Cluster.ModelInstan
     def __del__(self):
         for _, dic in self._registry.items():
             for proc in dic["procs"]:
-                proc.terminate()
+                proc["proc"].terminate()
 
 
     # registerModelInstance @5 [ModelInstance] (instance :ModelInstance, registrationToken :Text = "") -> (unregister :Common.Callback);
@@ -46,10 +46,14 @@ class SlurmMonicaInstanceFactory(cluster_admin_service_capnp.Cluster.ModelInstan
         """# register the given instance of some model optionally given the registration token and receive a
         # callback to unregister this instance again"""
 
-        registration_token = context.params.registrationToken
+        registration_token, proc_id = (context.params.registrationToken + ":0").split(":")[:2]
+
         if registration_token in self._registry:
             reg = self._registry[registration_token]
-            reg["instance_caps"].append({"cap": context.params.instance})
+            reg["instance_caps"].append({
+                "cap": context.params.instance,
+                "free": reg["procs"][proc_id]["free"]
+            })
             unreg_cap = common.CallbackImpl(lambda: self._registry.pop(registration_token, None), exec_callback_on_del=True)
             reg["unregister_caps"].append(unreg_cap)
             reg["fulfill_count"] -= 1
@@ -72,10 +76,10 @@ class SlurmMonicaInstanceFactory(cluster_admin_service_capnp.Cluster.ModelInstan
         "# return a new instance of the model"
 
         registration_token = str(uuid.uuid4())
-        monica = subprocess.Popen([self._path_to_monica_binaries + "monica-capnp-server.exe", "-i", "-cf", "-fa", "localhost", "-fp", str(self._port), "-rt", registration_token])
+        monica = subprocess.Popen([self._path_to_monica_binaries + "monica-capnp-server.exe", "-i", "-cf", "-fa", "localhost", "-fp", str(self._port), "-rt", registration_token + ":0"])
 
         reg = self._registry[registration_token]
-        reg["procs"] = [monica]
+        reg["procs"]["0"] = {"proc": monica, "free": common.CallbackImpl(lambda: monica.terminate(), exec_callback_on_del=True)}
         reg["fulfill_count"] = 1
         return reg["prom_fulfiller"].promise.then(lambda: setattr(context.results, "instance", self._registry[registration_token]["instance_caps"][0]))
         
@@ -85,9 +89,13 @@ class SlurmMonicaInstanceFactory(cluster_admin_service_capnp.Cluster.ModelInstan
         registration_token = str(uuid.uuid4())
         instance_count = context.params.numberOfInstances
 
-        procs = []
+        procs = {}
         for i in range(instance_count):
-            procs.append(subprocess.Popen([self._path_to_monica_binaries + "monica-capnp-server.exe", "-i", "-cf", "-fa", "localhost", "-fp", str(self._port), "-rt", registration_token]))
+            monica = subprocess.Popen([self._path_to_monica_binaries + "monica-capnp-server.exe", "-i", "-cf", "-fa", "localhost", "-fp", str(self._port), "-rt", registration_token + ":" + str(i)])
+            procs[str(i)] = {
+                "proc": monica,
+                "free": common.CallbackImpl(lambda: monica.terminate(), exec_callback_on_del=True)
+            }
 
         reg = self._registry[registration_token]
         reg["procs"] = procs
