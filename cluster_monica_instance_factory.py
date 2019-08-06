@@ -13,12 +13,10 @@ from collections import defaultdict
 
 import common
 import capnp
-#import climate_data_capnp
-capnp.remove_import_hook()
-#climate_data_capnp = capnp.load('capnproto_schemas/climate_data.capnp')
-model_capnp = capnp.load('capnproto_schemas/model.capnp')
-cluster_admin_service_capnp = capnp.load("capnproto_schemas/cluster_admin_service.capnp")
-common_capnp = capnp.load('capnproto_schemas/common.capnp')
+capnp.add_import_hook(additional_paths=["../vcpkg/packages/capnproto_x64-windows-static/include/", "../capnproto_schemas/"])
+import common_capnp
+import cluster_admin_service_capnp
+import model_capnp
 
 
 class SlurmMonicaInstanceFactory(cluster_admin_service_capnp.Cluster.ModelInstanceFactory.Server):
@@ -50,10 +48,11 @@ class SlurmMonicaInstanceFactory(cluster_admin_service_capnp.Cluster.ModelInstan
 
         if registration_token in self._registry:
             reg = self._registry[registration_token]
-            reg["instance_caps"].append({
-                "cap": context.params.instance,
-                "free": reg["procs"][proc_id]["free"]
-            })
+            #reg["instance_caps"].append({
+            #    "cap": context.params.instance,
+            #    "free": reg["procs"][proc_id].pop("free")
+            #})
+            reg["instance_caps"].append(common.CapHolderImpl(context.params.instance, registration_token, lambda: reg["procs"][proc_id].terminate()))
             unreg_cap = common.CallbackImpl(lambda: self._registry.pop(registration_token, None), exec_callback_on_del=True)
             reg["unregister_caps"].append(unreg_cap)
             reg["fulfill_count"] -= 1
@@ -72,14 +71,15 @@ class SlurmMonicaInstanceFactory(cluster_admin_service_capnp.Cluster.ModelInstan
         return {"id": str(self._uuid4), "name": "SlurmMonicaInstanceFactory(" + str(self._uuid4) + ")", "description": ""}
 
 
-    def newInstance_context(self, context): # newInstance @0 () -> (instance :AnyPointer);
+    def newInstance_context(self, context): # newInstance @0 () -> (instance :Capability);
         "# return a new instance of the model"
 
         registration_token = str(uuid.uuid4())
         monica = subprocess.Popen([self._path_to_monica_binaries + "monica-capnp-server.exe", "-i", "-cf", "-fa", "localhost", "-fp", str(self._port), "-rt", registration_token + ":0"])
 
         reg = self._registry[registration_token]
-        reg["procs"]["0"] = {"proc": monica, "free": common.CallbackImpl(lambda: monica.terminate(), exec_callback_on_del=True)}
+        #reg["procs"]["0"] = {"proc": monica, "free": common.CallbackImpl(lambda: monica.terminate(), exec_callback_on_del=True)}
+        reg["procs"]["0"] = monica
         reg["fulfill_count"] = 1
         return reg["prom_fulfiller"].promise.then(lambda: setattr(context.results, "instance", self._registry[registration_token]["instance_caps"][0]))
         

@@ -11,12 +11,8 @@ import uuid
 
 import common
 import capnp
-#import climate_data_capnp
-capnp.remove_import_hook()
-#climate_data_capnp = capnp.load('capnproto_schemas/climate_data.capnp')
-#model_capnp = capnp.load('capnproto_schemas/model.capnp')
-cluster_admin_service_capnp = capnp.load("capnproto_schemas/cluster_admin_service.capnp")
-#common_capnp = capnp.load('capnproto_schemas/common.capnp')
+capnp.add_import_hook(additional_paths=["../vcpkg/packages/capnproto_x64-windows-static/include/", "../capnproto_schemas/"])
+import cluster_admin_service_capnp
 
 def printBla(prom):
     print("bla, ", prom)

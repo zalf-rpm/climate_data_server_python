@@ -7,8 +7,8 @@ from collections import defaultdict
 import uuid
 
 import capnp
-capnp.remove_import_hook()
-common_capnp = capnp.load('capnproto_schemas/common.capnp')
+capnp.add_import_hook(additional_paths=["../vcpkg/packages/capnproto_x64-windows-static/include/", "../capnproto_schemas/"])
+import common_capnp
 
 class CallbackImpl(common_capnp.Common.Callback.Server):
 
@@ -26,6 +26,30 @@ class CallbackImpl(common_capnp.Common.Callback.Server):
     def call(self, _context, **kwargs): # call @0 ();
         self._callback(*self._args, **self._kwargs)
         self._already_called = True
+
+
+class CapHolderImpl(common_capnp.Common.CapHolder.Server):
+
+    def __init__(self, cap, sturdy_ref, cleanup_func, cleanup_on_del=False):
+        self._cap = cap
+        self._sturdy_ref = sturdy_ref
+        self._cleanup_func = cleanup_func
+        self._already_cleaned_up = False
+        self._cleanup_on_del = cleanup_on_del
+
+    def __del__(self):
+        if self._cleanup_on_del and not self._already_cleaned_up:
+            self.cleanup_func()
+
+    def cap_context(self, context): # cap @0 () -> (cap :Capability);
+        context.results.cap = self._cap
+
+    def free_context(self, context): # free @1 ();
+        self._cleanup_func()
+        self._cleanup_on_del = True
+
+    def save_context(self, context): # save @0 SaveParams -> SaveResults;
+        context.results.sturdyRef = self._sturdy_ref
 
 
 def main():

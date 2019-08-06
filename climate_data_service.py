@@ -9,11 +9,10 @@ import json
 import time
 
 import capnp
-#import climate_data_capnp
-capnp.remove_import_hook()
-climate_data_capnp = capnp.load('capnproto_schemas/climate_data.capnp')
-model_capnp = capnp.load('capnproto_schemas/model.capnp')
-common_capnp = capnp.load('capnproto_schemas/common.capnp')
+capnp.add_import_hook(additional_paths=["../vcpkg/packages/capnproto_x64-windows-static/include/", "../capnproto_schemas/"])
+import common_capnp
+import model_capnp
+import climate_data_capnp
 
 def read_header(path_to_ascii_grid_file):
     "read metadata from esri ascii grid file"

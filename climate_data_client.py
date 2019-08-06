@@ -1,8 +1,8 @@
 import time
+
 import capnp
-#import climate_data_capnp
-capnp.remove_import_hook()
-climate_data_capnp = capnp.load("capnproto_schemas/climate_data.capnp")
+capnp.add_import_hook(additional_paths=["../vcpkg/packages/capnproto_x64-windows-static/include/", "../capnproto_schemas/"])
+import climate_data_capnp
 
 def main():
     #address = parse_args().address

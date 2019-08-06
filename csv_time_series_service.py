@@ -7,10 +7,9 @@ import time
 
 #import argparse
 import capnp
-#import climate_data_capnp
-capnp.remove_import_hook()
-climate_data_capnp = capnp.load('capnproto_schemas/climate_data.capnp')
-common_capnp = capnp.load('capnproto_schemas/common.capnp')
+capnp.add_import_hook(additional_paths=["../vcpkg/packages/capnproto_x64-windows-static/include/", "../capnproto_schemas/"])
+import common_capnp
+import climate_data_capnp
 
 def create_date(capnp_date):
     return date(capnp_date.year, capnp_date.month, capnp_date.day)
