@@ -10,6 +10,7 @@ import capnp
 capnp.add_import_hook(additional_paths=["../vcpkg/packages/capnproto_x64-windows-static/include/", "../capnproto_schemas/"])
 import common_capnp
 
+# interface Callback
 class CallbackImpl(common_capnp.Common.Callback.Server):
 
     def __init__(self, callback, *args, exec_callback_on_del=False, **kwargs):
@@ -28,6 +29,7 @@ class CallbackImpl(common_capnp.Common.Callback.Server):
         self._already_called = True
 
 
+# interface CapHolder(CapType) extends(Persistent.Persistent(Text, Text))
 class CapHolderImpl(common_capnp.Common.CapHolder.Server):
 
     def __init__(self, cap, sturdy_ref, cleanup_func, cleanup_on_del=False):
@@ -41,8 +43,8 @@ class CapHolderImpl(common_capnp.Common.CapHolder.Server):
         if self._cleanup_on_del and not self._already_cleaned_up:
             self.cleanup_func()
 
-    def cap_context(self, context): # cap @0 () -> (cap :Capability);
-        context.results.cap = self._cap
+    def cap_context(self, context): # cap @0 () -> (cap :CapType);
+        context.results.cap = {"x": 1} #self._cap
 
     def free_context(self, context): # free @1 ();
         self._cleanup_func()
