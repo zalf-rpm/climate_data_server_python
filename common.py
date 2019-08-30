@@ -44,7 +44,7 @@ class CapHolderImpl(common_capnp.Common.CapHolder.Server):
             self.cleanup_func()
 
     def cap_context(self, context): # cap @0 () -> (cap :CapType);
-        context.results.cap = {"x": 1} #self._cap
+        context.results.cap = self._cap
 
     def free_context(self, context): # free @1 ();
         self._cleanup_func()
