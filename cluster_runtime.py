@@ -32,12 +32,16 @@ class SlurmRuntime(cluster_admin_service_capnp.Cluster.Runtime.Server):
         return {"id": str(self._uuid4), "name": "SlurmRuntime(" + str(self._uuid4) + ")", "description": ""}
 
     def delFactory(self, aModelId):
-        # remove factor for given model id
-        del self._factories[aModelId]
+        # remove factory for given model id
+        self._factories.pop(aModelId, None)
+        #del self._factories[aModelId]
         
         # unregister factory at admin_master 
-        del self._unregs[aModelId] # works because deleting object will just do the same as unregistering
-        #self._unregs.pop(aModelId).unregister()
+        #del self._unregs[aModelId] # works because deleting object will just do the same as unregistering
+        #self._unregs.pop(aModelFactoryId).unregister()
+        unreg = self._unregs.pop(aModelId, None)
+        if unreg:
+            unreg.call()
 
     def registerModelInstanceFactory(self, aModelId, aFactory, _context, **kwargs): # registerModelInstanceFactory @0 (aModelId :Text, aFactory :ModelInstanceFactory) -> (unreg :Common.Unregister);
         "register a model instance factory for the given model id"
