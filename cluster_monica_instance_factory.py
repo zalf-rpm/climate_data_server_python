@@ -14,8 +14,7 @@ from collections import defaultdict
 
 import common
 import capnp
-capnp.add_import_hook(additional_paths=[
-                      "../vcpkg/packages/capnproto_x64-windows-static/include/", "../capnproto_schemas/"])
+capnp.add_import_hook(additional_paths=["../vcpkg/packages/capnproto_x64-windows-static/include/", "../capnproto_schemas/"])
 
 import model_capnp
 import cluster_admin_service_capnp
@@ -53,19 +52,16 @@ class SlurmMonicaInstanceFactory(cluster_admin_service_capnp.Cluster.ModelInstan
 
         instance_reg_token = context.params.registrationToken
         # a token without id = single instance, will get 0 as id
-        registration_token, proc_id = (
-            instance_reg_token + ":0").split(":")[:2]
+        registration_token, proc_id = (instance_reg_token + ":0").split(":")[:2]
 
         if registration_token in self._registry:
             reg = self._registry[registration_token]
 
             # store new cap holder
-            reg["instance_caps"][proc_id] = common.CapHolderImpl(
-                context.params.instance, instance_reg_token, lambda: reg["procs"][proc_id].terminate())
+            reg["instance_caps"][proc_id] = common.CapHolderImpl(context.params.instance, instance_reg_token, lambda: reg["procs"][proc_id].terminate())
 
             # create unregister cap for instance, to get notified if instance dies
-            unreg_cap = common.CallbackImpl(lambda: self._registry.pop(
-                registration_token, None), exec_callback_on_del=True)
+            unreg_cap = common.CallbackImpl(lambda: self._registry.pop(registration_token, None), exec_callback_on_del=True)
             reg["unregister_caps"].append(unreg_cap)
             reg["fulfill_count"] -= 1
             if reg["fulfill_count"] == 0:
@@ -77,14 +73,13 @@ class SlurmMonicaInstanceFactory(cluster_admin_service_capnp.Cluster.ModelInstan
     def restoreSturdyRef_context(self, context):
         "# return the capability holder for the given sturdyRef if available"
 
-        registration_token, proc_id = (
-            context.params.sturdyRef + ":-1").split(":")[:2]
+        registration_token, proc_id = (context.params.sturdyRef + ":-1").split(":")[:2]
         if registration_token in self._registry:
             reg = self._registry[registration_token]
 
             if int(proc_id) < 0:
-                context.results.cap = common.CapHolderImpl(reg["instance_caps"].values(
-                ), registration_token, lambda: self.terminate_all_procs(registration_token))
+                context.results.cap = common.CapHolderImpl(reg["instance_caps"].values(), 
+                registration_token, lambda: self.terminate_all_procs(registration_token))
             else:
                 if proc_id in reg["instance_caps"]:
                     context.results.cap = reg["instance_caps"][proc_id]
@@ -149,8 +144,8 @@ def main():
     runtime_available = False
     while not runtime_available:
         try:
-            runtime = capnp.TwoPartyClient("localhost:9000").bootstrap().cast_as(
-                cluster_admin_service_capnp.Cluster.Runtime)
+            # runtime = capnp.TwoPartyClient("localhost:9000").bootstrap().cast_as(
+            runtime = capnp.TwoPartyClient("10.10.24.186:9000").bootstrap().cast_as(cluster_admin_service_capnp.Cluster.Runtime)
             runtime_available = True
         except:
             # time.sleep(1)
@@ -163,8 +158,7 @@ def main():
     registered_factory = False
     while not registered_factory:
         try:
-            unreg = runtime.registerModelInstanceFactory(
-                "monica_v2.1", monicaFactory).wait().unregister
+            unreg = runtime.registerModelInstanceFactory("monica_v2.1", monicaFactory).wait().unregister
             registered_factory = True
         except capnp.KjException as e:
             print(e)
