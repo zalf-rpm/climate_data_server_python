@@ -192,13 +192,27 @@ def create_capnp_date(py_date):
 class TimeSeries(climate_data_capnp.ClimateData.TimeSeries.Server): 
 
     def __init__(self, realization, path_to_csv=None, dataframe=None, headers=None, start_date=None, end_date=None):
+        if not path_to_csv and not dataframe:
+            raise Exception("Missing argument, either path_to_csv or dataframe have to be supplied!")
+
         self._path_to_csv = path_to_csv
         self._df = dataframe
         self._data = None
         self._headers = headers
-        self._start_date = (date.fromisoformat(self._df.index[0]) if len(self._df) > 0 else None) if not start_date and self._df else start_date
-        self._end_date = (date.fromisoformat(self._df.index[-1]) if len(self._df) > 0 else None) if not end_date and self._df else end_date
+
+        self._start_date = start_date
+        self._end_date = end_date
+        if self._df and len(self._df) > 0:
+            if not start_date:
+                self._start_date = date.fromisoformat(self._df.index[0])
+            if not end_date:
+                self._end_date = date.fromisoformat(self._df.index[-1])
+
         self._real = realization
+
+    def load_dataframe(self):
+        if not self._df:
+            self._df = pd.read_csv(self._path_to_csv, skiprows=[1], index_col=0)
 
     @property
     def dataframe(self):
@@ -211,39 +225,46 @@ class TimeSeries(climate_data_capnp.ClimateData.TimeSeries.Server):
             if not self._end_date:
                 self._end_date = date.fromisoformat(self._df.index[-1]) if len(self._df) > 0 else None
             if self._start_date and self._end_date:
-                self._df = self._df.loc[str(self._start_date):str(self._end_date)]
+                self._df = self.subrange(self._start_date, self._end_date)
             if self._headers:
-                self._df = self._df.loc[:, self._headers]
+                self._df = self.sub_header(self._headers)
         return self._df
-
 
     def resolution_context(self, context): # -> (resolution :TimeResolution);
         context.results.resolution = climate_data_capnp.Climate.TimeResolution.daily
 
     def range_context(self, context): # -> (startDate :Date, endDate :Date);
+        if not self._start_date or not self._end_date:
+            self.dataframe
         context.results.startDate = create_capnp_date(self._start_date)
         context.results.endDate = create_capnp_date(self._end_date)
         
     def header(self, **kwargs): # () -> (header :List(Element));
-        return self._df.columns.tolist()
+        return self.dataframe.columns.tolist()
 
     def data(self, **kwargs): # () -> (data :List(List(Float32)));
-        return self._df.to_numpy().tolist()
+        return self.dataframe.to_numpy().tolist()
 
     def dataT(self, **kwargs): # () -> (data :List(List(Float32)));
-        return self._df.T.to_numpy().tolist()
+        return self.dataframe.T.to_numpy().tolist()
                 
+    def subrange(self, from_date, to_date):
+        return self._df.loc[str(from_date):str(to_date)]
+
     def subrange_context(self, context): # (from :Date, to :Date) -> (timeSeries :TimeSeries);
         from_date = create_date(getattr(context.params, "from"))
         to_date = create_date(context.params.to)
 
-        sub_df = self._df.loc[str(from_date):str(to_date)]
+        sub_df = self.subrange(from_date, to_date)
 
         context.results.timeSeries = TimeSeries(self._real, dataframe=sub_df, start_date=from_date, end_date=to_date)
         
+    def sub_header(self, sub_headers):
+        return self.dataframe.loc[:, sub_headers]
+
     def subheader_context(self, context): # (elements :List(Element)) -> (timeSeries :TimeSeries);
         sub_headers = [str(e) for e in context.params.elements]
-        sub_df = self._df.loc[:, sub_headers]
+        sub_df = self.sub_header(sub_headers)
 
         context.results.timeSeries = TimeSeries(self._real, dataframe=sub_df, headers=sub_headers)
 
