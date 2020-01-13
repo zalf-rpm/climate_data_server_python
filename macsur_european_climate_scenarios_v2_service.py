@@ -9,8 +9,9 @@ import json
 import time
 import csv
 
-import ptvsd
-ptvsd.enable_attach("abc", address = ("0.0.0.0", 14000))
+#import ptvsd
+#ptvsd.enable_attach(("0.0.0.0", 14000))
+#ptvsd.wait_for_attach()  # blocks execution until debugger is attached
 
 import capnp
 if sys.platform == "win32":
