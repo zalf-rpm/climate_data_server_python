@@ -430,29 +430,30 @@ class Service(climate_data_capnp.ClimateData.Service.Server):
 
 def create_simulations():
     sims_and_scens = {
-        "GFDL-CM3": ["45", "85"],
-        "GISS-E2-R": ["45", "85"],
-        "HadGEM2-ES": ["26", "45", "85"],
-        "MIROC5": ["45", "85"],
-        "MPI-ESM-MR": ["26", "45", "85"]
+        "0": {"scens": ["0"], "tranges": ["0"]},
+        "GFDL-CM3": {"scens": ["45", "85"], "tranges": ["2", "3"]},
+        "GISS-E2-R": {"scens": ["45", "85"], "tranges": ["2", "3"]},
+        "HadGEM2-ES": {"scens": ["26", "45", "85"], "tranges": ["2", "3"]},
+        "MIROC5": {"scens": ["45", "85"], "tranges": ["2", "3"]},
+        "MPI-ESM-MR": {"scens": ["26", "45", "85"], "tranges": ["2", "3"]}
     }
 
     path_template = "/beegfs/common/data/climate/macsur_european_climate_scenarios_v2/transformed/{period_id}/{sim_id}_{scen_id}/{row}_{col}_{version}.csv"
 
-    def create_paths_to_time_series_csvs(path_template, sim_id, scen_id, version, row, col):
+    def create_paths_to_time_series_csvs(path_template, time_ranges, sim_id, scen_id, version, row, col):
         return [
-            path_template.format(sim_id=sim_id, scen_id=scen_id, version="v2", period_id="0", row=row, col=col),
-            path_template.format(sim_id=sim_id, scen_id=scen_id, version="v2", period_id="2", row=row, col=col),
-            path_template.format(sim_id=sim_id, scen_id=scen_id, version="v2", period_id="3", row=row, col=col)
+            path_template.format(sim_id=sim_id, scen_id=scen_id, version="v2", period_id=time_range, row=row, col=col) \
+            for time_range in time_ranges
         ]
 
     sims = []
-    for sim_id, scen_ids in sims_and_scens.items():
+    for sim_id, scens_and_tranges in sims_and_scens.items():
         sim = Simulation(sim_id, name=sim_id)
         scens = []
-        for scen_id in scen_ids:
+        tranges = scens_and_tranges["tranges"]
+        for scen_id in scens_and_tranges["scens"]:
             scen = Scenario(sim, scen_id, name=scen_id)
-            real = Realization(scen, lambda row, col: create_paths_to_time_series_csvs(path_template, sim_id, scen_id, "v2", row, col))
+            real = Realization(scen, lambda row, col: create_paths_to_time_series_csvs(path_template, tranges, sim_id, scen_id, "v2", row, col))
             scen.realizations = [real]
             scens.append(scen)
         sim.scenarios = scens
