@@ -9,6 +9,9 @@ import json
 import time
 import csv
 
+import ptvsd
+ptvsd.enable_attach("abc", address = ("0.0.0.0", 14000))
+
 import capnp
 if sys.platform == "win32":
     capnp.add_import_hook(additional_paths=["../vcpkg/packages/capnproto_x64-windows-static/include/", "../capnproto_schemas/"])
