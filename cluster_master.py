@@ -30,15 +30,17 @@ class AdminMasterImpl(cluster_admin_service_capnp.Cluster.AdminMaster.Server):
         return {"id": str(self._uuid4), "name": "AdminMaster(" + str(self._uuid4) + ")", "description": ""}
 
     #def unregisterFactory(self, aModelId, aFactory):
-    #    self._factories[aModelId].remove(aFactory)
+    #   self._factories[aModelId].remove(aFactory)
 
-    def registerModelInstanceFactory(self, aModelId, aFactory, _context, **kwargs): # registerModelInstanceFactory @0 (aModelId :Text, aFactory :ModelInstanceFactory) -> (unreg :Common.Unregister);
+    # registerModelInstanceFactory @0 (aModelId :Text, aFactory :ModelInstanceFactory) -> (unreg :Common.Unregister);
+    def registerModelInstanceFactory(self, aModelId, aFactory, _context, **kwargs):
         "# register a model instance factory for the given model id"
         self._factories[aModelId].append(aFactory)
         return common.CallbackImpl(lambda: self._factories[aModelId].remove(aFactory), exec_callback_on_del=True)
-        #return common.UnregisterImpl(self.unregisterFactory, aModelId, aFactory)
+        # return common.UnregisterImpl(self.unregisterFactory, aModelId, aFactory)
 
-    def availableModels_context(self, context): # availableModels @1 () -> (factories :List(ModelInstanceFactory));
+    # availableModels @1 () -> (factories :List(ModelInstanceFactory));
+    def availableModels_context(self, context):
         "# get instance factories to all the available models on registered runtimes"
         context.results.init("factories", len(self._factories))
         fs = []
@@ -61,7 +63,8 @@ class UserMasterImpl(cluster_admin_service_capnp.Cluster.UserMaster.Server):
         # interface to retrieve id information from an object
         return {"id": str(self._uuid4), "name": "UserMaster(" + str(self._uuid4) + ")", "description": ""}
 
-    def availableModels(self, context): # availableModels @0 () -> (factories :List(ModelInstanceFactory));
+    # availableModels @0 () -> (factories :List(ModelInstanceFactory));
+    def availableModels(self, context):
         "# get instance factories to all the available models to the user"
         return self._admin_master.availableModels()
 
@@ -81,32 +84,47 @@ class MultiRuntimeModelInstanceFactory(cluster_admin_service_capnp.Cluster.Model
         # interface to retrieve id information from an object
         return {"id": str(self._uuid4), "name": "MultiRuntimeModelInstanceFactory(" + self._model_id + ")(" + str(self._uuid4) + ")", "description": ""}
 
-    def newInstance_context(self, context): # newInstance @0 () -> (instance :AnyPointer);
+    # newInstance @0 () -> (instance :AnyPointer);
+    def newInstance_context(self, context):
         "# return a new instance of the model"
         pass
 
-    def newInstances_context(self, context): # newInstances @1 (numberOfInstances :Int16) -> (instances :AnyList);
+    # newInstances @1 (numberOfInstances :Int16) -> (instances :AnyList);
+    def newInstances_context(self, context):
         "# return the requested number of model instances"
         pass
 
-    def newCloudViaZmqPipelineProxies_context(self, context): # newCloudViaZmqPipelineProxies @2 (numberOfInstances :Int16) -> (zmqInputAddress :Text, zmqOutputAddress :Text);
+    # newCloudViaZmqPipelineProxies @2 (numberOfInstances :Int16) -> (zmqInputAddress :Text, zmqOutputAddress :Text);
+    def newCloudViaZmqPipelineProxies_context(self, context):
         "# return the TCP addresses of two ZeroMQ proxies to access the given number of instances of the model"
         pass
 
-    def newCloudViaProxy_context(self, context): # newCloudViaProxy @3 (numberOfInstances :Int16) -> (proxy :AnyPointer);
+    # newCloudViaProxy @3 (numberOfInstances :Int16) -> (proxy :AnyPointer);
+    def newCloudViaProxy_context(self, context):
         "# return a model proxy acting as a gateway to the requested number of model instances"
         pass
 
 
-
-
-
 def main():
+    config = {
+        "port": "6666"
+    }
+    # read commandline args only if script is invoked directly from commandline
+    if len(sys.argv) > 1 and __name__ == "__main__":
+        for arg in sys.argv[1:]:
+            k, v = arg.split("=")
+            if k in config:
+                config[k] = v
+
+    print("config:", config)
+
     #address = parse_args().address
 
     #server = capnp.TwoPartyServer("*:8000", bootstrap=DataServiceImpl("/home/berg/archive/data/"))
-    server = capnp.TwoPartyServer("*:8000", bootstrap=AdminMasterImpl()) #UserMasterImpl(AdminMasterImpl()))
+    # UserMasterImpl(AdminMasterImpl()))
+    server = capnp.TwoPartyServer("*:" + config["port"], bootstrap=AdminMasterImpl())
     server.run_forever()
+
 
 if __name__ == '__main__':
     main()
