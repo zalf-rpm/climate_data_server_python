@@ -267,7 +267,7 @@ class Simulation(climate_data_capnp.ClimateData.Simulation.Server):
     @property    
     def lat_lon_interpolator(self):
         if not self._lat_lon_interpol:
-            self._lat_lon_interpol = create_lat_lon_interpolator_from_csv_coords_file("macsur_european-climate_scenarios_geo_coords_and_altitude.csv")
+            self._lat_lon_interpol = create_lat_lon_interpolator_from_csv_coords_file("macsur_european_climate_scenarios_geo_coords_and_altitude.csv")
         return self._lat_lon_interpol
 
     @property
