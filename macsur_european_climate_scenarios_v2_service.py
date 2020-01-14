@@ -389,7 +389,7 @@ class Realization(climate_data_capnp.ClimateData.Realization.Server):
         c = self._paths_to_csv_config
         closest_time_series = []
         for time_range in c["time_ranges"]:
-            formated_path = path_template.format(sim_id=c["sim_id"], scen_id=c["scen_id"], version=c["version_id"], period_id=time_range, row=c["row"], col=c["col"])
+            formated_path = c["path_template"].format(sim_id=c["sim_id"], scen_id=c["scen_id"], version=c["version_id"], period_id=time_range, row=c["row"], col=c["col"])
             closest_time_series.append(TimeSeries.from_csv_file(self, formated_path, time_range))
             
         return closest_time_series
