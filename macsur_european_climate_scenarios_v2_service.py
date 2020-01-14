@@ -362,9 +362,9 @@ class Scenario(climate_data_capnp.ClimateData.Scenario.Server):
 
 class Realization(climate_data_capnp.ClimateData.Realization.Server):
 
-    def __init__(self, scen, create_paths_to_csv, id=None, name=None, description=None):
+    def __init__(self, scen, paths_to_csv_config, id=None, name=None, description=None):
         self._scen = scen
-        self._create_paths_to_csv = create_paths_to_csv
+        self._paths_to_csv_config = paths_to_csv_config
         self._id = id if id else "1"
         self._name = name if name else self._id
         self._description = description if description else ""
@@ -386,11 +386,12 @@ class Realization(climate_data_capnp.ClimateData.Realization.Server):
 
         row, col = lat_lon_interpolator()(lat, lon)
 
-        closest_time_series = list([
-            TimeSeries.from_csv_file(self, path_to_csv, time_range) 
-            for path_to_csv, time_range in self._create_paths_to_csv(row, col)
-        ])
-
+        c = self._paths_to_csv_config
+        closest_time_series = []
+        for time_range in c["time_ranges"]:
+            formated_path = path_template.format(sim_id=c["sim_id"], scen_id=c["scen_id"], version=c["version_id"], period_id=time_range, row=c["row"], col=c["col"])
+            closest_time_series.append(TimeSeries.from_csv_file(self, formated_path, time_range))
+            
         return closest_time_series
 
 
@@ -440,12 +441,6 @@ def create_simulations():
 
     path_template = "/beegfs/common/data/climate/macsur_european_climate_scenarios_v2/transformed/{period_id}/{sim_id}_{scen_id}/{row}_{col:03d}_{version}.csv"
 
-    def create_paths_to_time_series_csvs(path_template, time_ranges, sim_id, scen_id, version, row, col):
-        return list([
-            (path_template.format(sim_id=sim_id, scen_id=scen_id, version="v2", period_id=time_range, row=row, col=col), time_range) \
-            for time_range in time_ranges
-        ])
-
     sims = []
     for sim_id, scens_and_tranges in sims_and_scens.items():
         sim = Simulation(sim_id, name=sim_id)
@@ -453,7 +448,15 @@ def create_simulations():
         tranges = scens_and_tranges["tranges"]
         for scen_id in scens_and_tranges["scens"]:
             scen = Scenario(sim, scen_id, name=scen_id)
-            real = Realization(scen, lambda row, col: create_paths_to_time_series_csvs(path_template, tranges, sim_id, scen_id, "v2", row, col))
+            real = Realization(scen, {
+                "path_template": path_template, 
+                "time_ranges": tranges, 
+                "sim_id": sim_id, 
+                "scen_id": scen_id,
+                "version_id": "v2",
+                "row": row, 
+                "col": col
+            })
             scen.realizations = [real]
             scens.append(scen)
         sim.scenarios = scens
