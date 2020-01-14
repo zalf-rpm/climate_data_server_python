@@ -438,7 +438,7 @@ def create_simulations():
         "MPI-ESM-MR": {"scens": ["26", "45", "85"], "tranges": ["2", "3"]}
     }
 
-    path_template = "/beegfs/common/data/climate/macsur_european_climate_scenarios_v2/transformed/{period_id}/{sim_id}_{scen_id}/{row:03d}_{col:03d}_{version}.csv"
+    path_template = "/beegfs/common/data/climate/macsur_european_climate_scenarios_v2/transformed/{period_id}/{sim_id}_{scen_id}/{row}_{col:03d}_{version}.csv"
 
     def create_paths_to_time_series_csvs(path_template, time_ranges, sim_id, scen_id, version, row, col):
         return [
