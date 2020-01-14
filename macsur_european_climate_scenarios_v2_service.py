@@ -382,7 +382,11 @@ class Realization(climate_data_capnp.ClimateData.Realization.Server):
         interpol = self.scenario.simulation.lat_lon_interpolator
         row, col = interpol(lat, lon)
 
-        closest_time_series = [TimeSeries(self, path_to_csv) for path_to_csv in self._create_paths_to_csv(row, col)]
+        all_headers = [
+            "tmin", "tavg", "tmax",
+            "precip", "globrad", "wind",
+            "relhumid"]
+        closest_time_series = [TimeSeries(self, path_to_csv, headers=all_headers) for path_to_csv in self._create_paths_to_csv(row, col)]
 
         return closest_time_series
 
