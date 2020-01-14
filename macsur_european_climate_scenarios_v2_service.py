@@ -141,7 +141,7 @@ def lat_lon_interpolator():
     "create an interpolator for the macsur grid"
     if not hasattr(lat_lon_interpolator, "interpol"):
         lat_lon_interpolator.interpol = create_lat_lon_interpolator_from_csv_coords_file("macsur_european_climate_scenarios_geo_coords_and_altitude.csv")
-    return lat_lon_interpol.interpol
+    return lat_lon_interpolator.interpol
 
 
 class Station(climate_data_capnp.ClimateData.Station.Server):
