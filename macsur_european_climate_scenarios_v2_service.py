@@ -202,7 +202,7 @@ class TimeSeries(climate_data_capnp.ClimateData.TimeSeries.Server):
 
         self._start_date = start_date
         self._end_date = end_date
-        if self._df and len(self._df) > 0:
+        if self._df is not None and len(self._df) > 0:
             if not start_date:
                 self._start_date = date.fromisoformat(self._df.index[0])
             if not end_date:
@@ -210,14 +210,10 @@ class TimeSeries(climate_data_capnp.ClimateData.TimeSeries.Server):
 
         self._real = realization
 
-    def load_dataframe(self):
-        if not self._df:
-            self._df = pd.read_csv(self._path_to_csv, skiprows=[1], index_col=0)
-
     @property
     def dataframe(self):
         "init underlying dataframe if initialized with path to csv file"
-        if not self._df and self._path_to_csv:
+        if self._df is None and self._path_to_csv:
             self._df = pd.read_csv(self._path_to_csv, skiprows=[1], index_col=0)
             #self._df = self._df.rename(columns={"windspeed": "wind"})
             if not self._start_date:
