@@ -20,6 +20,7 @@ elif sys.platform == "linux":
     capnp.add_import_hook(additional_paths=["../capnproto_schemas/"])
 import common_capnp
 #import model_capnp
+import geo_coord_capnp
 import climate_data_capnp
 
 TIME_RANGES = {
@@ -102,8 +103,8 @@ def create_lat_lon_interpolator_from_csv_coords_file(path_to_csv_coords_file):
             col = int(rowcol - row*1000)
             lat = float(line[1])
             lon = float(line[2])
-            #alt = float(line[3])
-            cdict[(row, col)] = (round(lat, 5), round(lon, 5))
+            alt = float(line[3])
+            cdict[(row, col)] = {"lat": round(lat, 5), "lon": round(lon, 5), "alt": alt}
             points.append([lat, lon])
             values.append((row, col))
             #print("row:", row, "col:", col, "clat:", clat, "clon:", clon, "h:", h, "r:", r, "val:", values[i])
@@ -136,47 +137,54 @@ def geo_coord_to_latlon(geo_coord):
     return lat, lon
 
 
+def lat_lon_interpolator():
+    "create an interpolator for the macsur grid"
+    if not hasattr(lat_lon_interpolator, "interpol"):
+        lat_lon_interpolator.interpol = create_lat_lon_interpolator_from_csv_coords_file("macsur_european_climate_scenarios_geo_coords_and_altitude.csv")
+    return lat_lon_interpol.interpol
+
+
 class Station(climate_data_capnp.ClimateData.Station.Server):
 
     def __init__(self, sim, id, geo_coord, name=None, description=None):
-        self.sim = sim
-        self.id = id
-        self.name = name if name else id
-        self.description = description if description else ""
-        self.time_series_s = []
-        self.geo_coord = geo_coord
+        self._sim = sim
+        self._id = id
+        self._name = name if name else id
+        self._description = description if description else ""
+        self._time_series = []
+        self._geo_coord = geo_coord
 
-    def info(self):
-        return common_capnp.Common.IdInformation.new_message(id=self.id, name=self.name, description=self.description) 
+    def info(self, *kwargs): # () -> (info :IdInformation);
+        return common_capnp.Common.IdInformation.new_message(id=self._id, name=self._name, description=self._description) 
 
-    def info_context(self, context): # -> (info :IdInformation);
-        context.results.info = self.info()
+    def simulationInfo(self, **kwargs): # () -> (simInfo :IdInformation);
+        return self._sim.info()
 
-    def simulationInfo_context(self, context): # -> (simInfo :IdInformation);
-        context.results.simInfo = self.sim.info()
+    def heightNN(self, **kwargs): # () -> (heightNN :Int32);
+        return self._geo_coord["alt"]
 
-    def heightNN_context(self, context): # -> (heightNN :Int32);
-        context.results.heightNN = 0
-
-    def geoCoord_context(self, context): # -> (geoCoord :Geo.Coord);
-        pass
+    def geoCoord(self, **kwargs): # () -> (geoCoord :Geo.Coord);
+        coord = geo_coord_capnp.Geo.Coord.new_message()
+        coord.init("latlon")
+        coord.latlon.lat = self._geo_coord["lat"]
+        coord.latlon.lon = self._geo_coord["lon"]
+        return coord
         #return {"gk": {"meridianNo": 5, "r": 1, "h": 2}}
 
-    def allTimeSeries_context(self, context): # -> (allTimeSeries :List(TimeSeries));
+    def allTimeSeries(self, **kwargs): # () -> (allTimeSeries :List(TimeSeries));
         # get all time series available at this station 
         
-        if len(self.time_series_s) == 0:
-            for scen in self.sim.scenarios:
+        if len(self._time_series) == 0:
+            for scen in self._sim.scenarios:
                 for real in scen.realizations:
-                    self.time_series_s.append(real.closest_time_series_at(self.geo_coord))
+                    for ts in real.closest_time_series_at(self._geo_coord["lat"], self._geo_coord["lon"]):
+                        self._time_series.append(ts)
         
-        context.results.init("allTimeSeries", len(self.time_series_s))
-        for i, ts in enumerate(self.time_series_s):
-            context.result.allTimeSeries[i] = ts
+        return self._time_series
 
-
-    def timeSeriesFor_context(self, context): # (scenarioId :Text, realizationId :Text) -> (timeSeries :TimeSeries);
-        pass
+    def timeSeriesFor(self, scenarioId, realizationId, **kwargs): # (scenarioId :Text, realizationId :Text) -> (timeSeries :TimeSeries);
+        # get all time series for a given scenario and realization at this station
+        return list(filter(lambda ts: ts.scenarioInfo().id == scenarioId and ts.realizationInfo().id == realizationId, allTimeSeries))
 
 
 def create_date(capnp_date):
@@ -226,11 +234,11 @@ class TimeSeries(climate_data_capnp.ClimateData.TimeSeries.Server):
             # update time ranges as the csv runs always from 1980 to 2010
             time_range = {
                 "0": {"from": 1980, "to": 2010},
-                "2": {"from": 2040, "to": 2069},
-                "3": {"from": 2070, "to": 2099}
+                "2": {"from": 2040, "to": 2070},
+                "3": {"from": 2070, "to": 2100}
             }[self._time_range_id]
             if time_range != "0":
-                self._df.reindex(pd.date_range(date(time_range["from"], 1, 1), date(time_range["to"], 12, 31)))
+                self._df.set_index(pd.date_range(date(time_range["from"], 1, 1), date(time_range["to"], 12, 31)), inplace=True)
             
         return self._df
 
@@ -264,6 +272,18 @@ class TimeSeries(climate_data_capnp.ClimateData.TimeSeries.Server):
 
         context.results.timeSeries = TimeSeries.from_dataframew(self._real, sub_df)
 
+    def simulationInfo(self, **kwargs): # simulationInfo @7 () -> (simulationInfo :Common.IdInformation);
+        "which simulation does the time series belong to"
+        return self._real.scenario.simulation.info()
+
+    def scenarioInfo(self, **kwargs): # scenarioInfo @8 () -> (scenarioInfo :Common.IdInformation);
+        "which scenario does the time series belong to"
+        return self._real.scenario.info()
+
+    def realizationInfo(self, **kwargs): # realizationInfo @9 () -> (realizationInfo :Common.IdInformation);
+        "which realization does the time series belong to"
+        return self._real.info()
+
 
 class Simulation(climate_data_capnp.ClimateData.Simulation.Server): 
 
@@ -282,14 +302,8 @@ class Simulation(climate_data_capnp.ClimateData.Simulation.Server):
     def info(self):
         return common_capnp.Common.IdInformation.new_message(id=self._id, name=self._name, description=self._description) 
 
-    def info_context(self, context): # -> (info :IdInformation);
+    def info_context(self, context): # () -> (info :IdInformation);
         context.results.info = self.info()
-
-    @property    
-    def lat_lon_interpolator(self):
-        if not self._lat_lon_interpol:
-            self._lat_lon_interpol = create_lat_lon_interpolator_from_csv_coords_file("macsur_european_climate_scenarios_geo_coords_and_altitude.csv")
-        return self._lat_lon_interpol
 
     @property
     def scenarios(self):
@@ -301,16 +315,17 @@ class Simulation(climate_data_capnp.ClimateData.Simulation.Server):
     def scenarios(self, scens):
         self._scens = scens
 
-    def scenarios_context(self, context): # -> (scenarios :List(Scenario));
+    def scenarios_context(self, context): # () -> (scenarios :List(Scenario));
         context.results.init("scenarios", len(self.scenarios))
         for i, scen in enumerate(self.scenarios):
             context.results.scenarios[i] = scen
 
     @property
     def stations(self):
-        pass
+        return [Station(self, "[r:{}/c:{}]".format(row_col[0], row_col[1]), {"lat": lat_lon[0], "lon": lat_lon[1]}) for row_col, lat_lon in cdict.items()]
+        
 
-    def stations_context(self, context): # -> (stations :List(Station));
+    def stations_context(self, context): # () -> (stations :List(Station));
         pass
 
 
@@ -329,13 +344,13 @@ class Scenario(climate_data_capnp.ClimateData.Scenario.Server):
     def info_context(self, context): # -> (info :IdInformation);
         context.results.info = self.info()
         
+    def simulationInfo(self, **kwargs): # () -> (simulationInfo :Common.IdInformation);
+        return self._sim.info()
+
     @property
     def simulation(self):
-        return self._sim    
+        return self._sim
 
-    def simulation_context(self, context): # -> (simulation :Simulation);
-        context.results.simulation = self._sim
-        
     @property
     def realizations(self):
         return self._reals
@@ -365,19 +380,16 @@ class Realization(climate_data_capnp.ClimateData.Realization.Server):
     def info_context(self, context): # -> (info :IdInformation);
         context.results.info = self.info()
 
+    def scenarioInfo(self, **kwargs): # () -> (scenarioInfo :Common.IdInformation);
+        return self._scen.info()
+        
     @property
     def scenario(self):
         return self._scen
 
-    def scenario_context(self, context): # -> (scenario :Scenario);
-        context.results.scenario = self._scen
-        
-    def closest_time_series_at(self, geo_coord):
+    def closest_time_series_at(self, lat, lon):
 
-        lat, lon = geo_coord_to_latlon(geo_coord)
-
-        interpol = self.scenario.simulation.lat_lon_interpolator
-        row, col = interpol(lat, lon)
+        row, col = lat_lon_interpolator()(lat, lon)
 
         closest_time_series = [
             TimeSeries.from_csv_file(self, path_to_csv, time_range) 
@@ -387,12 +399,11 @@ class Realization(climate_data_capnp.ClimateData.Realization.Server):
         return closest_time_series
 
 
-    def closestTimeSeriesAt_context(self, context): # (geoCoord :Geo.Coord) -> (timeSeries :List(TimeSeries));
+    def closestTimeSeriesAt(self, geoCoord, **kwargs): # (geoCoord :Geo.Coord) -> (timeSeries :List(TimeSeries));
         # closest TimeSeries object which represents the whole time series 
         # of the climate realization at the give climate coordinate
-
-        context.results.timeSeries = self.closest_time_series_at(context.params.geoCoord)
-
+        lat, lon = geo_coord_to_latlon(geoCoord)
+        return self.closest_time_series_at(lat, lon)
 
 
 class Service(climate_data_capnp.ClimateData.Service.Server):
