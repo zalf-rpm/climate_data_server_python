@@ -154,7 +154,7 @@ class Station(climate_data_capnp.ClimateData.Station.Server):
         self._time_series = []
         self._geo_coord = geo_coord
 
-    def info(self, *kwargs): # () -> (info :IdInformation);
+    def info(self, **kwargs): # () -> (info :IdInformation);
         return common_capnp.Common.IdInformation.new_message(id=self._id, name=self._name, description=self._description) 
 
     def simulationInfo(self, **kwargs): # () -> (simInfo :IdInformation);
@@ -184,7 +184,7 @@ class Station(climate_data_capnp.ClimateData.Station.Server):
 
     def timeSeriesFor(self, scenarioId, realizationId, **kwargs): # (scenarioId :Text, realizationId :Text) -> (timeSeries :TimeSeries);
         # get all time series for a given scenario and realization at this station
-        return list(filter(lambda ts: ts.scenarioInfo().id == scenarioId and ts.realizationInfo().id == realizationId, allTimeSeries))
+        return list(filter(lambda ts: ts.scenarioInfo().id == scenarioId and ts.realizationInfo().id == realizationId, self.allTimeSeries()))
 
 
 def create_date(capnp_date):
