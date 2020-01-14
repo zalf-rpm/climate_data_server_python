@@ -191,49 +191,55 @@ def create_capnp_date(py_date):
     
 class TimeSeries(climate_data_capnp.ClimateData.TimeSeries.Server): 
 
-    def __init__(self, realization, path_to_csv=None, dataframe=None, headers=None, start_date=None, end_date=None):
+    def __init__(self, realization, path_to_csv=None, time_range_id=None, dataframe=None):
+        "a supplied dataframe asumes the correct index is already set (when reading from csv then it will always be 1980 to 2010)"
+
         if not path_to_csv and not dataframe:
             raise Exception("Missing argument, either path_to_csv or dataframe have to be supplied!")
+        if path_to_csv and not time_range_id:
+            raise Exception("Missing argument, when supplying the path_to_csv, you also have to supply a time_range_id!")
 
         self._path_to_csv = path_to_csv
+        self._time_range_id = time_range_id
         self._df = dataframe
-        self._data = None
-        self._headers = headers
-
-        self._start_date = start_date
-        self._end_date = end_date
-        if self._df is not None and len(self._df) > 0:
-            if not start_date:
-                self._start_date = date.fromisoformat(self._df.index[0])
-            if not end_date:
-                self._end_date = date.fromisoformat(self._df.index[-1])
-
         self._real = realization
+
+    @classmethod
+    def from_csv_file(cls, realization, path_to_csv, time_range_id):
+        return TimeSeries(realization, path_to_csv, time_range_id)
+
+    @classmethod
+    def from_dataframe(cls, realization, dataframe):
+        return TimeSeries(dataframe)
 
     @property
     def dataframe(self):
-        "init underlying dataframe if initialized with path to csv file"
+        "init underlying dataframe lazily if initialized with path to csv file"
         if self._df is None and self._path_to_csv:
+            # load csv file
             self._df = pd.read_csv(self._path_to_csv, skiprows=[1], index_col=0)
-            #self._df = self._df.rename(columns={"windspeed": "wind"})
-            if not self._start_date:
-                self._start_date = date.fromisoformat(self._df.index[0]) if len(self._df) > 0 else None
-            if not self._end_date:
-                self._end_date = date.fromisoformat(self._df.index[-1]) if len(self._df) > 0 else None
-            if self._start_date and self._end_date:
-                self._df = self.subrange(self._start_date, self._end_date)
-            if self._headers:
-                self._df = self.sub_header(self._headers)
+
+            # reduce headers to the supported ones
+            all_supported_headers = ["tmin", "tavg", "tmax", "precip", "globrad", "wind", "relhumid"]
+            self._df = self._df.loc[:, all_supported_headers]
+
+            # update time ranges as the csv runs always from 1980 to 2010
+            time_range = {
+                "0": {"from": 1980, "to": 2010},
+                "2": {"from": 2040, "to": 2069},
+                "3": {"from": 2070, "to": 2099}
+            }[self._time_range_id]
+            if time_range != "0":
+                self._df.reindex(pd.date_range(date(time_range["from"], 1, 1), date(time_range["to"], 12, 31)))
+            
         return self._df
 
     def resolution_context(self, context): # -> (resolution :TimeResolution);
         context.results.resolution = climate_data_capnp.Climate.TimeResolution.daily
 
     def range_context(self, context): # -> (startDate :Date, endDate :Date);
-        if not self._start_date or not self._end_date:
-            self.dataframe
-        context.results.startDate = create_capnp_date(self._start_date)
-        context.results.endDate = create_capnp_date(self._end_date)
+        context.results.startDate = create_capnp_date(date.fromisoformat(self.dataframe.index[0]))
+        context.results.endDate = create_capnp_date(date.fromisoformat(self.dataframe.index[-1]))
         
     def header(self, **kwargs): # () -> (header :List(Element));
         return self.dataframe.columns.tolist()
@@ -244,25 +250,19 @@ class TimeSeries(climate_data_capnp.ClimateData.TimeSeries.Server):
     def dataT(self, **kwargs): # () -> (data :List(List(Float32)));
         return self.dataframe.T.to_numpy().tolist()
                 
-    def subrange(self, from_date, to_date):
-        return self._df.loc[str(from_date):str(to_date)]
-
     def subrange_context(self, context): # (from :Date, to :Date) -> (timeSeries :TimeSeries);
         from_date = create_date(getattr(context.params, "from"))
         to_date = create_date(context.params.to)
 
-        sub_df = self.subrange(from_date, to_date)
+        sub_df = self._df.loc[str(from_date):str(to_date)]
 
-        context.results.timeSeries = TimeSeries(self._real, dataframe=sub_df, start_date=from_date, end_date=to_date)
-        
-    def sub_header(self, sub_headers):
-        return self.dataframe.loc[:, sub_headers]
+        context.results.timeSeries = TimeSeries.from_dataframe(self._real, sub_df)
 
     def subheader_context(self, context): # (elements :List(Element)) -> (timeSeries :TimeSeries);
         sub_headers = [str(e) for e in context.params.elements]
-        sub_df = self.sub_header(sub_headers)
+        sub_df = self.dataframe.loc[:, sub_headers]
 
-        context.results.timeSeries = TimeSeries(self._real, dataframe=sub_df, headers=sub_headers)
+        context.results.timeSeries = TimeSeries.from_dataframew(self._real, sub_df)
 
 
 class Simulation(climate_data_capnp.ClimateData.Simulation.Server): 
@@ -305,7 +305,6 @@ class Simulation(climate_data_capnp.ClimateData.Simulation.Server):
         context.results.init("scenarios", len(self.scenarios))
         for i, scen in enumerate(self.scenarios):
             context.results.scenarios[i] = scen
-        
 
     @property
     def stations(self):
@@ -313,8 +312,6 @@ class Simulation(climate_data_capnp.ClimateData.Simulation.Server):
 
     def stations_context(self, context): # -> (stations :List(Station));
         pass
-        
-
 
 
 class Scenario(climate_data_capnp.ClimateData.Scenario.Server):
@@ -382,11 +379,10 @@ class Realization(climate_data_capnp.ClimateData.Realization.Server):
         interpol = self.scenario.simulation.lat_lon_interpolator
         row, col = interpol(lat, lon)
 
-        all_headers = [
-            "tmin", "tavg", "tmax",
-            "precip", "globrad", "wind",
-            "relhumid"]
-        closest_time_series = [TimeSeries(self, path_to_csv, headers=all_headers) for path_to_csv in self._create_paths_to_csv(row, col)]
+        closest_time_series = [
+            TimeSeries.from_csv_file(self, path_to_csv, time_range) 
+            for path_to_csv, time_range in self._create_paths_to_csv(row, col)
+        ]
 
         return closest_time_series
 
@@ -426,8 +422,6 @@ class Service(climate_data_capnp.ClimateData.Service.Server):
                 return sim
 
 
-
-
 def create_simulations():
     sims_and_scens = {
         "0": {"scens": ["0"], "tranges": ["0"]},
@@ -442,7 +436,7 @@ def create_simulations():
 
     def create_paths_to_time_series_csvs(path_template, time_ranges, sim_id, scen_id, version, row, col):
         return [
-            path_template.format(sim_id=sim_id, scen_id=scen_id, version="v2", period_id=time_range, row=row, col=col) \
+            (path_template.format(sim_id=sim_id, scen_id=scen_id, version="v2", period_id=time_range, row=row, col=col), time_range) \
             for time_range in time_ranges
         ]
 
