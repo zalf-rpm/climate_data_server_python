@@ -321,7 +321,7 @@ class Simulation(climate_data_capnp.ClimateData.Simulation.Server):
             context.results.scenarios[i] = scen
 
     def stations(self, **kwargs): # () -> (stations :List(Station));
-        return [Station(self, "[r:{}/c:{}]".format(row_col[0], row_col[1]), coord) for row_col, coord in cdict.items()]
+        return list([Station(self, "[r:{}/c:{}]".format(row_col[0], row_col[1]), coord) for row_col, coord in cdict.items()])
 
 
 class Scenario(climate_data_capnp.ClimateData.Scenario.Server):
@@ -386,10 +386,10 @@ class Realization(climate_data_capnp.ClimateData.Realization.Server):
 
         row, col = lat_lon_interpolator()(lat, lon)
 
-        closest_time_series = [
+        closest_time_series = list([
             TimeSeries.from_csv_file(self, path_to_csv, time_range) 
             for path_to_csv, time_range in self._create_paths_to_csv(row, col)
-        ]
+        ])
 
         return closest_time_series
 
@@ -441,10 +441,10 @@ def create_simulations():
     path_template = "/beegfs/common/data/climate/macsur_european_climate_scenarios_v2/transformed/{period_id}/{sim_id}_{scen_id}/{row}_{col:03d}_{version}.csv"
 
     def create_paths_to_time_series_csvs(path_template, time_ranges, sim_id, scen_id, version, row, col):
-        return [
+        return list([
             (path_template.format(sim_id=sim_id, scen_id=scen_id, version="v2", period_id=time_range, row=row, col=col), time_range) \
             for time_range in time_ranges
-        ]
+        ])
 
     sims = []
     for sim_id, scens_and_tranges in sims_and_scens.items():
