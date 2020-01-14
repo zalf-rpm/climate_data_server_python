@@ -320,13 +320,8 @@ class Simulation(climate_data_capnp.ClimateData.Simulation.Server):
         for i, scen in enumerate(self.scenarios):
             context.results.scenarios[i] = scen
 
-    @property
-    def stations(self):
+    def stations(self, **kwargs): # () -> (stations :List(Station));
         return [Station(self, "[r:{}/c:{}]".format(row_col[0], row_col[1]), {"lat": lat_lon[0], "lon": lat_lon[1]}) for row_col, lat_lon in cdict.items()]
-        
-
-    def stations_context(self, context): # () -> (stations :List(Station));
-        pass
 
 
 class Scenario(climate_data_capnp.ClimateData.Scenario.Server):
