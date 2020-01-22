@@ -14,10 +14,7 @@ import csv
 #ptvsd.wait_for_attach()  # blocks execution until debugger is attached
 
 import capnp
-if sys.platform == "win32":
-    capnp.add_import_hook(additional_paths=["../vcpkg/packages/capnproto_x64-windows-static/include/", "../capnproto_schemas/"])
-elif sys.platform == "linux":
-    capnp.add_import_hook(additional_paths=["../capnproto_schemas/"])
+capnp.add_import_hook(additional_paths=["../capnproto_schemas/", "../capnproto_schemas/capnp_schemas/"])
 import common_capnp
 #import model_capnp
 import geo_coord_capnp

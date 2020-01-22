@@ -7,9 +7,9 @@ import json
 import time
 
 #import argparse
-import common
+#import common
 import capnp
-capnp.add_import_hook(additional_paths=["../vcpkg/packages/capnproto_x64-windows-static/include/", "../capnproto_schemas/"])
+capnp.add_import_hook(additional_paths=["../capnproto_schemas/", "../capnproto_schemas/capnp_schemas/"])
 import common_capnp
 import climate_data_capnp
 
@@ -26,7 +26,7 @@ def create_capnp_date(py_date):
     }
 
 
-class CSV_TimeSeries(climate_data_capnp.Climate.TimeSeries.Server):
+class CSV_TimeSeries(climate_data_capnp.ClimateData.TimeSeries.Server):
 
     def __init__(self, dataframe=None, path_to_csv_file=None, headers=None, start_date=None, end_date=None):
         if path_to_csv_file:
@@ -77,15 +77,15 @@ class CSV_TimeSeries(climate_data_capnp.Climate.TimeSeries.Server):
                                                     start_date=self._start_date, end_date=self._end_date)
 
 
-class CSV_TimeSeries_CH(climate_data_capnp.Climate.Test.Server):
+#class CSV_TimeSeries_CH(climate_data_capnp.ClimateData.Test.Server):
 
-    def __init__(self, dataframe=None, path_to_csv_file=None, headers=None, start_date=None, end_date=None):
-        self._ts = CSV_TimeSeries(dataframe=dataframe, path_to_csv_file=path_to_csv_file,
-                                  headers=headers, start_date=start_date, end_date=end_date)
+#    def __init__(self, dataframe=None, path_to_csv_file=None, headers=None, start_date=None, end_date=None):
+#        self._ts = CSV_TimeSeries(dataframe=dataframe, path_to_csv_file=path_to_csv_file,
+#                                  headers=headers, start_date=start_date, end_date=end_date)
 
-    def timeSeries(self, **kwargs):
-        print("dataT requested")
-        return common.CapHolderImpl(self._ts, "sturdy ref", lambda: print("cleanup called"))
+#    def timeSeries(self, **kwargs):
+#        print("dataT requested")
+#        return common.CapHolderImpl(self._ts, "sturdy ref", lambda: print("cleanup called"))
 
 
 def main():
@@ -103,8 +103,8 @@ def main():
                 config[k] = v
 
     server = capnp.TwoPartyServer(config["server"] + ":" + config["port"],
-                                  bootstrap=CSV_TimeSeries_CH(path_to_csv_file=config["path_to_csv_file"]))
-                                  #bootstrap=CSV_TimeSeries(path_to_csv_file=config["path_to_csv_file"]))
+                                  #bootstrap=CSV_TimeSeries_CH(path_to_csv_file=config["path_to_csv_file"]))
+                                  bootstrap=CSV_TimeSeries(path_to_csv_file=config["path_to_csv_file"]))
     server.run_forever()
 
 
