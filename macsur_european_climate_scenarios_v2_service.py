@@ -243,8 +243,8 @@ class TimeSeries(climate_data_capnp.ClimateData.TimeSeries.Server):
         context.results.resolution = climate_data_capnp.Climate.TimeResolution.daily
 
     def range_context(self, context): # -> (startDate :Date, endDate :Date);
-        context.results.startDate = create_capnp_date(date.fromisoformat(self.dataframe.index[0]))
-        context.results.endDate = create_capnp_date(date.fromisoformat(self.dataframe.index[-1]))
+        context.results.startDate = create_capnp_date(date.fromisoformat(str(self.dataframe.index[0])[:10]))
+        context.results.endDate = create_capnp_date(date.fromisoformat(str(self.dataframe.index[-1])[:10]))
         
     def header(self, **kwargs): # () -> (header :List(Element));
         return self.dataframe.columns.tolist()
