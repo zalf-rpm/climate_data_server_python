@@ -226,13 +226,14 @@ class TimeSeries(climate_data_capnp.ClimateData.TimeSeries.Server):
             self._df = self._df.loc[:, all_supported_headers]
 
             # update time ranges as the csv runs always from 1980 to 2010
-            time_range = {
-                "0": {"from": 1980, "to": 2010},
-                "2": {"from": 2040, "to": 2070},
-                "3": {"from": 2070, "to": 2100}
-            }[self._time_range_id]
-            if time_range != "0" and self._adapt_timeseries_to_future_dates:
-                if time_range == "3":
+            if self._time_range_id != "0" and self._adapt_timeseries_to_future_dates:
+                time_range = {
+                    "0": {"from": 1980, "to": 2010},
+                    "2": {"from": 2040, "to": 2070},
+                    "3": {"from": 2070, "to": 2100}
+                }[self._time_range_id]
+            
+                if self._time_range_id == "3":
                     # drop the 1980 leap year day february 29th for the time range 2070 to 2100
                     self._df.drop("1980-02-29", axis=0, inplace=True)
                 self._df.set_index(pd.date_range(date(time_range["from"], 1, 1), date(time_range["to"], 12, 31)), inplace=True)
