@@ -20,11 +20,7 @@ import common_capnp
 import geo_coord_capnp
 import climate_data_capnp
 
-TIME_RANGES = {
-    "0": {"from": 1980, "to": 2010},
-    "2": {"from": 2040, "to": 2069},
-    "3": {"from": 2070, "to": 2099}
-}
+ADAPT_TIMESERIES_TO_FUTURE_DATES = True
 
 def read_header(path_to_ascii_grid_file):
     "read metadata from esri ascii grid file"
@@ -196,7 +192,7 @@ def create_capnp_date(py_date):
     
 class TimeSeries(climate_data_capnp.ClimateData.TimeSeries.Server): 
 
-    def __init__(self, realization, path_to_csv=None, time_range_id=None, dataframe=None):
+    def __init__(self, realization, path_to_csv=None, time_range_id=None, dataframe=None, adapt_timeseries_to_future_dates=None):
         "a supplied dataframe asumes the correct index is already set (when reading from csv then it will always be 1980 to 2010)"
 
         if not path_to_csv and not dataframe:
@@ -208,10 +204,11 @@ class TimeSeries(climate_data_capnp.ClimateData.TimeSeries.Server):
         self._time_range_id = time_range_id
         self._df = dataframe
         self._real = realization
+        self._adapt_timeseries_to_future_dates = adapt_timeseries_to_future_dates
 
     @classmethod
-    def from_csv_file(cls, realization, path_to_csv, time_range_id):
-        return TimeSeries(realization, path_to_csv, time_range_id)
+    def from_csv_file(cls, realization, path_to_csv, time_range_id, adapt_timeseries_to_future_dates):
+        return TimeSeries(realization, path_to_csv, time_range_id, adapt_timeseries_to_future_dates=adapt_timeseries_to_future_dates)
 
     @classmethod
     def from_dataframe(cls, realization, dataframe):
@@ -234,7 +231,10 @@ class TimeSeries(climate_data_capnp.ClimateData.TimeSeries.Server):
                 "2": {"from": 2040, "to": 2070},
                 "3": {"from": 2070, "to": 2100}
             }[self._time_range_id]
-            if time_range != "0":
+            if time_range != "0" and self._adapt_timeseries_to_future_dates:
+                if time_range == "3":
+                    # drop the 1980 leap year day february 29th for the time range 2070 to 2100
+                    self._df.drop("1980-02-29", axis=0, inplace=True)
                 self._df.set_index(pd.date_range(date(time_range["from"], 1, 1), date(time_range["to"], 12, 31)), inplace=True)
             
         return self._df
@@ -359,12 +359,13 @@ class Scenario(climate_data_capnp.ClimateData.Scenario.Server):
 
 class Realization(climate_data_capnp.ClimateData.Realization.Server):
 
-    def __init__(self, scen, paths_to_csv_config, id=None, name=None, description=None):
+    def __init__(self, scen, paths_to_csv_config, id=None, name=None, description=None, adapt_timeseries_to_future_dates=True):
         self._scen = scen
         self._paths_to_csv_config = paths_to_csv_config
         self._id = id if id else "1"
         self._name = name if name else self._id
         self._description = description if description else ""
+        self._adapt_timeseries_to_future_dates = adapt_timeseries_to_future_dates
 
     def info(self):
         return common_capnp.Common.IdInformation.new_message(id=self._id, name=self._name, description=self._description) 
@@ -387,7 +388,7 @@ class Realization(climate_data_capnp.ClimateData.Realization.Server):
         closest_time_series = []
         for time_range in c["time_ranges"]:
             formated_path = c["path_template"].format(sim_id=c["sim_id"], scen_id=c["scen_id"], version=c["version_id"], period_id=time_range, row=row, col=col)
-            closest_time_series.append(TimeSeries.from_csv_file(self, formated_path, time_range))
+            closest_time_series.append(TimeSeries.from_csv_file(self, formated_path, time_range, self._adapt_timeseries_to_future_dates))
             
         return closest_time_series
 
@@ -401,11 +402,11 @@ class Realization(climate_data_capnp.ClimateData.Realization.Server):
 
 class Service(climate_data_capnp.ClimateData.Service.Server):
 
-    def __init__(self, id=None, name=None, description=None):
+    def __init__(self, id=None, name=None, description=None, adapt_timeseries_to_future_dates=True):
         self._id = id if id else "macsur_european_climate_scenarios_v2"
         self._name = name if name else "MACSUR European Climate Scenarios V2"
         self._description = description if description else ""
-        self._sims = create_simulations()
+        self._sims = create_simulations(adapt_timeseries_to_future_dates)
 
     def info(self):
         return common_capnp.Common.IdInformation.new_message(id=self._id, name=self._name, description=self._description) 
@@ -418,7 +419,6 @@ class Service(climate_data_capnp.ClimateData.Service.Server):
         #context.results.init("realizations", len(self._realizations))
         #for i, real in enumerate(self.realizations):
         #    context.results.realizations[i] = real
-        
 
     def getSimulation(self, id, **kwargs): # getSimulation @1 (id :UInt64) -> (simulation :Simulation);
         for sim in self._sims:
@@ -426,7 +426,7 @@ class Service(climate_data_capnp.ClimateData.Service.Server):
                 return sim
 
 
-def create_simulations():
+def create_simulations(adapt_timeseries_to_future_dates):
     sims_and_scens = {
         "0": {"scens": ["0"], "tranges": ["0"]},
         "GFDL-CM3": {"scens": ["45", "85"], "tranges": ["2", "3"]},
@@ -451,7 +451,7 @@ def create_simulations():
                 "sim_id": sim_id, 
                 "scen_id": scen_id,
                 "version_id": "v2"
-            })
+            }, adapt_timeseries_to_future_dates=adapt_timeseries_to_future_dates)
             scen.realizations = [real]
             scens.append(scen)
         sim.scenarios = scens
