@@ -79,17 +79,31 @@ class CSV_TimeSeries(climate_data_capnp.ClimateData.TimeSeries.Server):
 
 class List_Tests(climate_data_capnp.ClimateData.ListTests.Server):
 
+    def __init__(self):
+        self.lf32 = list([1 for x in range(1000)])
+        print("lf32 done")
+        self.llf32 = list([[x for x in range(1,8)] for _ in range(1000)])
+        print("llf32 done")
+        self.li32 = list([1 for x in range(2895)])
+        print("li32 done")
+        self.lli32 = list([[x for x in range(1,8)] for _ in range(1000)])
+        print("lli32 done")
+        self.i = 0
+
     def testLF32(self, **kwargs): # () -> (test1 :List(Float32));
-        return [x for x in range(1,1000+1)]
+        return self.lf32
 
     def testLLF32(self, **kwargs): # () -> (test1 :List(List(Float32)));
-        return [[x for x in range(1,8)] for _ in range(1,330+1)]
+        return self.llf32
 
-    def testLF32(self, **kwargs): # () -> (test1 :List(Int32));
-        return [x for x in range(1,1000+1)]
+    def testLI32(self, **kwargs): # () -> (test1 :List(Int32));
+        self.i = self.i + 1
+        return [1 for x in range(self.i)]
+        #return self.li32
 
-    def testLF32(self, **kwargs): # () -> (test1 :List(List(Int32)));
-        return [[x for x in range(1,8)] for _ in range(1,330+1)]
+    def testLLI32(self, **kwargs): # () -> (test1 :List(List(Int32)));
+        return self.lli32
+
 
 
 #class CSV_TimeSeries_CH(climate_data_capnp.ClimateData.Test.Server):
@@ -118,8 +132,9 @@ def main():
                 config[k] = v
 
     server = capnp.TwoPartyServer(config["server"] + ":" + config["port"],
+                                  bootstrap=List_Tests())
                                   #bootstrap=CSV_TimeSeries_CH(path_to_csv_file=config["path_to_csv_file"]))
-                                  bootstrap=CSV_TimeSeries(path_to_csv_file=config["path_to_csv_file"]))
+                                  #bootstrap=CSV_TimeSeries(path_to_csv_file=config["path_to_csv_file"]))
     server.run_forever()
 
 
