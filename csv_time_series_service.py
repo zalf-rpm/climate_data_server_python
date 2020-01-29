@@ -41,7 +41,7 @@ class CSV_TimeSeries(climate_data_capnp.ClimateData.TimeSeries.Server):
         #self._real = realization
 
     def resolution_context(self, context): # -> (resolution :TimeResolution);
-        context.results.resolution = climate_data_capnp.Climate.TimeResolution.daily
+        context.results.resolution = climate_data_capnp.ClimateData.TimeResolution.daily
 
     def range_context(self, context): # -> (startDate :Date, endDate :Date);
         context.results.startDate = create_capnp_date(self._start_date)
@@ -52,6 +52,7 @@ class CSV_TimeSeries(climate_data_capnp.ClimateData.TimeSeries.Server):
 
     def data(self, **kwargs): # () -> (data :List(List(Float32)));
         print("data requested")
+        return [[x for x in range(1,8)] for _ in range(1,330+1)]
         return self._df.to_numpy().tolist()
 
     def dataT(self, **kwargs): # () -> (data :List(List(Float32)));
@@ -76,6 +77,20 @@ class CSV_TimeSeries(climate_data_capnp.ClimateData.TimeSeries.Server):
         context.results.timeSeries = CSV_TimeSeries(dataframe=sub_df, headers=sub_headers,
                                                     start_date=self._start_date, end_date=self._end_date)
 
+class List_Tests(climate_data_capnp.ClimateData.ListTests.Server):
+
+    def testLF32(self, **kwargs): # () -> (test1 :List(Float32));
+        return [x for x in range(1,1000+1)]
+
+    def testLLF32(self, **kwargs): # () -> (test1 :List(List(Float32)));
+        return [[x for x in range(1,8)] for _ in range(1,330+1)]
+
+    def testLF32(self, **kwargs): # () -> (test1 :List(Int32));
+        return [x for x in range(1,1000+1)]
+
+    def testLF32(self, **kwargs): # () -> (test1 :List(List(Int32)));
+        return [[x for x in range(1,8)] for _ in range(1,330+1)]
+
 
 #class CSV_TimeSeries_CH(climate_data_capnp.ClimateData.Test.Server):
 
@@ -91,7 +106,7 @@ class CSV_TimeSeries(climate_data_capnp.ClimateData.TimeSeries.Server):
 def main():
 
     config = {
-        "port": "11000",
+        "port": "11002",
         "server": "*",
         "path_to_csv_file": "climate-iso.csv"
     }
