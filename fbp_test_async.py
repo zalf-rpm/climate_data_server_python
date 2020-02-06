@@ -89,7 +89,6 @@ async def myreader(client, reader):
         data = await reader.read(4096)
         client.write(data)
 
-
 async def mywriter(client, writer):
     while True:
         data = await client.read(4096)
@@ -103,10 +102,10 @@ class Process(fbp_capnp.FBP.Input.Server):
     def __init__(self, out):
         self._out = out
 
-    def input_context(self, context): # (data :Text);
-        data = context.params.data
+    def input(self, data, _context, **kwargs): # (data :Text);
+        #time.sleep(1)
         self._out.input(data + " -> output")
-        #print("outputed", data + " -> output")
+        print("outputed", data + " -> output")
 
 class Consumer(fbp_capnp.FBP.Input.Server):
     def __init__(self):
@@ -119,8 +118,9 @@ class Consumer(fbp_capnp.FBP.Input.Server):
             self.start = time.time()
 
         self.count = self.count + 1
-        if self.count % 1000 == 0:
-            print(data, "count:", self.count)
+        #if self.count % 1000 == 0:
+        #    print(data, "count:", self.count)
+        print(data, "count:", self.count)
 
         if self.count == 100000:
             print("received", self.count, "messages in", time.time()-self.start, "s")
@@ -148,7 +148,7 @@ async def produce(config):
             await asyncio.gather(*l)
             l = []
         #await process.input("data " + str(i)).a_wait()
-        #print("sent","data " + str(i))
+        print("sent","data " + str(i))
 
     end = time.time()
     print("sent", outer*sub, "messages in", end-start, "s")
@@ -174,7 +174,7 @@ async def main():
         "process_port": "10001",
         "consumer_port": "10002",
         "server": "*",
-        "start": "Consumer"
+        "start": "Process"
     }
     # read commandline args only if script is invoked directly from commandline
     if len(sys.argv) > 1 and __name__ == "__main__":
