@@ -9,10 +9,10 @@ import json
 import time
 
 import capnp
-capnp.add_import_hook(additional_paths=["../vcpkg/packages/capnproto_x64-windows-static/include/", "../capnproto_schemas/"])
-import common_capnp
-import model_capnp
-import climate_data_capnp
+capnp.add_import_hook(additional_paths=["../capnproto_schemas/", "../capnproto_schemas/capnp_schemas/"])
+import common_capnp as c
+import model_capnp as m
+import climate_data_old_capnp as cd
 
 def read_header(path_to_ascii_grid_file):
     "read metadata from esri ascii grid file"
@@ -113,7 +113,7 @@ def geo_coord_to_latlon(geo_coord):
     if which == "gk":
         meridian = geo_coord.gk.meridianNo
         if meridian not in geo_coord_to_latlon.gk_cache:
-            geo_coord_to_latlon.gk_cache[meridian] = Proj(init="epsg:" + str(climate_data_capnp.Geo.EPSG["gk" + str(meridian)]))
+            geo_coord_to_latlon.gk_cache[meridian] = Proj(init="epsg:" + str(cd.Geo.EPSG["gk" + str(meridian)]))
         lon, lat = transform(geo_coord_to_latlon.gk_cache[meridian], wgs84, geo_coord.gk.r, geo_coord.gk.h)
     elif which == "latlon":
         lat, lon = geo_coord.latlon.lat, geo_coord.latlon.lon
@@ -121,13 +121,13 @@ def geo_coord_to_latlon(geo_coord):
         utm_id = str(geo_coord.utm.zone) + geo_coord.utm.latitudeBand
         if meridian not in geo_coord_to_latlon.utm_cache:
             geo_coord_to_latlon.utm_cache[utm_id] = \
-                Proj(init="epsg:" + str(climate_data_capnp.Geo.EPSG["utm" + utm_id]))
+                Proj(init="epsg:" + str(cd.Geo.EPSG["utm" + utm_id]))
         lon, lat = transform(geo_coord_to_latlon.utm_cache[utm_id], wgs84, geo_coord.utm.r, geo_coord.utm.h)
 
     return lat, lon
 
 
-class Isimip_CSV_Station(climate_data_capnp.Climate.Station.Server):
+class Isimip_CSV_Station(cd.Climate.Station.Server):
 
     def __init__(self, sim, id, geo_coord, name=None, description=None):
         self.sim = sim
@@ -138,7 +138,7 @@ class Isimip_CSV_Station(climate_data_capnp.Climate.Station.Server):
         self.geo_coord = geo_coord
 
     def info(self):
-        return common_capnp.Common.IdInformation.new_message(id=self.id, name=self.name, description=self.description) 
+        return c.Common.IdInformation.new_message(id=self.id, name=self.name, description=self.description) 
 
     def info_context(self, context): # -> (info :IdInformation);
         context.results.info = self.info()
@@ -180,7 +180,7 @@ def create_capnp_date(py_date):
         "day": py_date.day if py_date else 0
     }
     
-class Isimip_CSV_TimeSeries(climate_data_capnp.Climate.TimeSeries.Server): 
+class Isimip_CSV_TimeSeries(cd.Climate.TimeSeries.Server): 
 
     def __init__(self, realization, dataframe, headers=None, start_date=None, end_date=None):
         self._df = dataframe.rename(columns={"windspeed": "wind"})
@@ -199,7 +199,7 @@ class Isimip_CSV_TimeSeries(climate_data_capnp.Climate.TimeSeries.Server):
         return time_series
 
     def resolution_context(self, context): # -> (resolution :TimeResolution);
-        context.results.resolution = climate_data_capnp.Climate.TimeResolution.daily
+        context.results.resolution = cd.Climate.TimeResolution.daily
 
     def range_context(self, context): # -> (startDate :Date, endDate :Date);
         context.results.startDate = create_capnp_date(self._start_date)
@@ -234,7 +234,7 @@ class Isimip_CSV_TimeSeries(climate_data_capnp.Climate.TimeSeries.Server):
         
 
 
-class Isimip_CSV_Simulation(climate_data_capnp.Climate.Simulation.Server): 
+class Isimip_CSV_Simulation(cd.Climate.Simulation.Server): 
 
     def __init__(self, id, path_to_sim_dir, name=None, description=None):
         self._id = id
@@ -247,7 +247,7 @@ class Isimip_CSV_Simulation(climate_data_capnp.Climate.Simulation.Server):
         
 
     def info(self):
-        return common_capnp.Common.IdInformation.new_message(id=self._id, name=self._name, description=self._description) 
+        return c.Common.IdInformation.new_message(id=self._id, name=self._name, description=self._description) 
 
     def info_context(self, context): # -> (info :IdInformation);
         context.results.info = self.info()
@@ -290,7 +290,7 @@ class Isimip_CSV_Simulation(climate_data_capnp.Climate.Simulation.Server):
 
 
 
-class Isimip_CSV_Scenario(climate_data_capnp.Climate.Scenario.Server):
+class Isimip_CSV_Scenario(cd.Climate.Scenario.Server):
 
     def __init__(self, sim, id, path_to_scen_dir, name=None, description=None):
         self._sim = sim
@@ -301,7 +301,7 @@ class Isimip_CSV_Scenario(climate_data_capnp.Climate.Scenario.Server):
         self._path_to_scen_dir = path_to_scen_dir
 
     def info(self):
-        return common_capnp.Common.IdInformation.new_message(id=self._id, name=self._name, description=self._description) 
+        return c.Common.IdInformation.new_message(id=self._id, name=self._name, description=self._description) 
 
     def info_context(self, context): # -> (info :IdInformation);
         context.results.info = self.info()
@@ -335,7 +335,7 @@ class Isimip_CSV_Scenario(climate_data_capnp.Climate.Scenario.Server):
         
 
 
-class Isimip_CSV_Realization(climate_data_capnp.Climate.Realization.Server):
+class Isimip_CSV_Realization(cd.Climate.Realization.Server):
 
     def __init__(self, scen, path_to_csvs, id=None, name=None, description=None):
         self._scen = scen
@@ -345,7 +345,7 @@ class Isimip_CSV_Realization(climate_data_capnp.Climate.Realization.Server):
         self._description = description if description else ""
 
     def info(self):
-        return common_capnp.Common.IdInformation.new_message(id=self._id, name=self._name, description=self._description) 
+        return c.Common.IdInformation.new_message(id=self._id, name=self._name, description=self._description) 
 
     def info_context(self, context): # -> (info :IdInformation);
         context.results.info = self.info()
@@ -387,7 +387,7 @@ class Isimip_CSV_Realization(climate_data_capnp.Climate.Realization.Server):
 
 
 
-class YearlyTavg(model_capnp.Model.ClimateInstance.Server):
+class YearlyTavg(m.Model.ClimateInstance.Server):
 
     def __init__(self):
         pass
@@ -431,7 +431,7 @@ class YearlyTavg(model_capnp.Model.ClimateInstance.Server):
 
 
 
-class DataServiceImpl(climate_data_capnp.Climate.DataService.Server):
+class DataServiceImpl(cd.Climate.DataService.Server):
     "Implementation of the Climate.DataService Cap'n Proto interface."
 
     def __init__(self, path_to_data_dir):

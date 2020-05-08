@@ -76,15 +76,16 @@ def main():
 
     print(cmip_service.info().wait())
 
-    all_mdss = cmip_service.getAvailableMetadatasets().wait()
-    mds = all_mdss.metadatasets[0]
-    es = mds.entries
-    ds = mds.dataset
+    all_dss = cmip_service.getAvailableDatasets().wait().datasets
+    mpd0 = all_dss[0]
+    es = mpd0.meta.entries
+    ds = mpd0.data
     ts = ds.closestTimeSeriesAt({"latlon": {"lat": 50.0, "lon": 12.0}}).wait().timeSeries
     h = ts.header().wait().header
     data = ts.data().wait().data
+    loc = ts.location().wait()
 
-    some_dss = cmip_service.getDatasets({"entries": [{"gcm": "ichecEcEarth"}]}).wait().datasets
+    some_dss = cmip_service.getDatasetsFor({"entries": [{"gcm": "ichecEcEarth"}]}).wait().datasets
     ds2 = some_dss[0]
     md2 = ds2.metadata().wait()
     print(md2)
@@ -92,6 +93,7 @@ def main():
     print(info2)
     infos2 = md2.info.forAll().wait().all
     print(infos2)
+    locs = ds2.locations().wait().locations
 
 
     proms = []

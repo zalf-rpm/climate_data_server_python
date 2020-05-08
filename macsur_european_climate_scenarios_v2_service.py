@@ -13,12 +13,15 @@ import csv
 #ptvsd.enable_attach(("0.0.0.0", 14000))
 #ptvsd.wait_for_attach()  # blocks execution until debugger is attached
 
+#remote debugging via commandline
+#-m ptvsd --host 0.0.0.0 --port 14000 --wait
+
 import capnp
 capnp.add_import_hook(additional_paths=["../capnproto_schemas/", "../capnproto_schemas/capnp_schemas/"])
-import common_capnp
+import common_capnp as c
 #import model_capnp
-import geo_coord_capnp
-import climate_data_capnp
+import geo_coord_capnp as geo
+import climate_data_old_capnp as cd
 
 ADAPT_TIMESERIES_TO_FUTURE_DATES = True
 
@@ -116,7 +119,7 @@ def geo_coord_to_latlon(geo_coord):
     if which == "gk":
         meridian = geo_coord.gk.meridianNo
         if meridian not in geo_coord_to_latlon.gk_cache:
-            geo_coord_to_latlon.gk_cache[meridian] = Proj(init="epsg:" + str(climate_data_capnp.Geo.EPSG["gk" + str(meridian)]))
+            geo_coord_to_latlon.gk_cache[meridian] = Proj(init="epsg:" + str(cd.Geo.EPSG["gk" + str(meridian)]))
         lon, lat = transform(geo_coord_to_latlon.gk_cache[meridian], wgs84, geo_coord.gk.r, geo_coord.gk.h)
     elif which == "latlon":
         lat, lon = geo_coord.latlon.lat, geo_coord.latlon.lon
@@ -124,7 +127,7 @@ def geo_coord_to_latlon(geo_coord):
         utm_id = str(geo_coord.utm.zone) + geo_coord.utm.latitudeBand
         if meridian not in geo_coord_to_latlon.utm_cache:
             geo_coord_to_latlon.utm_cache[utm_id] = \
-                Proj(init="epsg:" + str(climate_data_capnp.Geo.EPSG["utm" + utm_id]))
+                Proj(init="epsg:" + str(cd.Geo.EPSG["utm" + utm_id]))
         lon, lat = transform(geo_coord_to_latlon.utm_cache[utm_id], wgs84, geo_coord.utm.r, geo_coord.utm.h)
 
     return lat, lon
@@ -137,7 +140,7 @@ def lat_lon_interpolator():
     return lat_lon_interpolator.interpol
 
 
-class Station(climate_data_capnp.ClimateData.Station.Server):
+class Station(cd.ClimateData.Station.Server):
 
     def __init__(self, sim, id, geo_coord, name=None, description=None):
         self._sim = sim
@@ -148,7 +151,7 @@ class Station(climate_data_capnp.ClimateData.Station.Server):
         self._geo_coord = geo_coord
 
     def info(self, **kwargs): # () -> (info :IdInformation);
-        return common_capnp.Common.IdInformation.new_message(id=self._id, name=self._name, description=self._description) 
+        return c.Common.IdInformation.new_message(id=self._id, name=self._name, description=self._description) 
 
     def simulationInfo(self, **kwargs): # () -> (simInfo :IdInformation);
         return self._sim.info()
@@ -157,7 +160,7 @@ class Station(climate_data_capnp.ClimateData.Station.Server):
         return self._geo_coord["alt"]
 
     def geoCoord(self, **kwargs): # () -> (geoCoord :Geo.Coord);
-        coord = geo_coord_capnp.Geo.Coord.new_message()
+        coord = geo.Geo.Coord.new_message()
         coord.init("latlon")
         coord.latlon.lat = self._geo_coord["lat"]
         coord.latlon.lon = self._geo_coord["lon"]
@@ -190,7 +193,7 @@ def create_capnp_date(py_date):
         "day": py_date.day if py_date else 0
     }
     
-class TimeSeries(climate_data_capnp.ClimateData.TimeSeries.Server): 
+class TimeSeries(cd.ClimateData.TimeSeries.Server): 
 
     def __init__(self, realization, path_to_csv=None, time_range_id=None, dataframe=None, adapt_timeseries_to_future_dates=None):
         "a supplied dataframe asumes the correct index is already set (when reading from csv then it will always be 1980 to 2010)"
@@ -241,7 +244,7 @@ class TimeSeries(climate_data_capnp.ClimateData.TimeSeries.Server):
         return self._df
 
     def resolution_context(self, context): # -> (resolution :TimeResolution);
-        context.results.resolution = climate_data_capnp.Climate.TimeResolution.daily
+        context.results.resolution = cd.Climate.TimeResolution.daily
 
     def range_context(self, context): # -> (startDate :Date, endDate :Date);
         context.results.startDate = create_capnp_date(date.fromisoformat(str(self.dataframe.index[0])[:10]))
@@ -283,7 +286,7 @@ class TimeSeries(climate_data_capnp.ClimateData.TimeSeries.Server):
         return self._real.info()
 
 
-class Simulation(climate_data_capnp.ClimateData.Simulation.Server): 
+class Simulation(cd.ClimateData.Simulation.Server): 
 
     def __init__(self, id, name=None, description=None, scenario_ids=None):
         self._id = id
@@ -298,7 +301,7 @@ class Simulation(climate_data_capnp.ClimateData.Simulation.Server):
         return self._id
 
     def info(self):
-        return common_capnp.Common.IdInformation.new_message(id=self._id, name=self._name, description=self._description) 
+        return c.Common.IdInformation.new_message(id=self._id, name=self._name, description=self._description) 
 
     def info_context(self, context): # () -> (info :IdInformation);
         context.results.info = self.info()
@@ -322,7 +325,7 @@ class Simulation(climate_data_capnp.ClimateData.Simulation.Server):
         return list([Station(self, "[r:{}/c:{}]".format(row_col[0], row_col[1]), coord) for row_col, coord in cdict.items()])
 
 
-class Scenario(climate_data_capnp.ClimateData.Scenario.Server):
+class Scenario(cd.ClimateData.Scenario.Server):
 
     def __init__(self, sim, id, reals=[], name=None, description=None):
         self._sim = sim
@@ -332,7 +335,7 @@ class Scenario(climate_data_capnp.ClimateData.Scenario.Server):
         self._reals = reals
 
     def info(self):
-        return common_capnp.Common.IdInformation.new_message(id=self._id, name=self._name, description=self._description) 
+        return c.Common.IdInformation.new_message(id=self._id, name=self._name, description=self._description) 
 
     def info_context(self, context): # -> (info :IdInformation);
         context.results.info = self.info()
@@ -358,7 +361,7 @@ class Scenario(climate_data_capnp.ClimateData.Scenario.Server):
             context.results.realizations[i] = real
 
 
-class Realization(climate_data_capnp.ClimateData.Realization.Server):
+class Realization(cd.ClimateData.Realization.Server):
 
     def __init__(self, scen, paths_to_csv_config, id=None, name=None, description=None, adapt_timeseries_to_future_dates=True):
         self._scen = scen
@@ -369,7 +372,7 @@ class Realization(climate_data_capnp.ClimateData.Realization.Server):
         self._adapt_timeseries_to_future_dates = adapt_timeseries_to_future_dates
 
     def info(self):
-        return common_capnp.Common.IdInformation.new_message(id=self._id, name=self._name, description=self._description) 
+        return c.Common.IdInformation.new_message(id=self._id, name=self._name, description=self._description) 
 
     def info_context(self, context): # -> (info :IdInformation);
         context.results.info = self.info()
@@ -401,7 +404,7 @@ class Realization(climate_data_capnp.ClimateData.Realization.Server):
         return self.closest_time_series_at(lat, lon)
 
 
-class Service(climate_data_capnp.ClimateData.Service.Server):
+class Service(cd.ClimateData.Service.Server):
 
     def __init__(self, id=None, name=None, description=None, adapt_timeseries_to_future_dates=True):
         self._id = id if id else "macsur_european_climate_scenarios_v2"
@@ -410,7 +413,7 @@ class Service(climate_data_capnp.ClimateData.Service.Server):
         self._sims = create_simulations(adapt_timeseries_to_future_dates)
 
     def info(self):
-        return common_capnp.Common.IdInformation.new_message(id=self._id, name=self._name, description=self._description) 
+        return c.Common.IdInformation.new_message(id=self._id, name=self._name, description=self._description) 
 
     def info_context(self, context): # -> (info :IdInformation);
         context.results.info = self.info()

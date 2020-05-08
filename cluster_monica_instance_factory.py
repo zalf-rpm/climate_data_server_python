@@ -14,7 +14,7 @@ from collections import defaultdict
 
 import common
 import capnp
-capnp.add_import_hook(additional_paths=["../vcpkg/packages/capnproto_x64-windows-static/include/", "../capnproto_schemas/"])
+capnp.add_import_hook(additional_paths=["../capnproto_schemas/", "../capnproto_schemas/capnp_schemas/"])
 
 import model_capnp
 import cluster_admin_service_capnp

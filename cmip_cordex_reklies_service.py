@@ -19,10 +19,9 @@ import csv
 
 import capnp
 capnp.add_import_hook(additional_paths=["../capnproto_schemas/", "../capnproto_schemas/capnp_schemas/"])
-import common_capnp
-#import model_capnp
-import geo_coord_capnp
-import climate_data2_capnp
+#import common_capnp as c
+import geo_coord_capnp as geo
+import climate_data_capnp as cd
 
 def read_header(path_to_ascii_grid_file):
     "read metadata from esri ascii grid file"
@@ -97,7 +96,7 @@ def create_lat_lon_interpolator_from_json_coords_file(path_to_json_coords_file):
             row, col = rowcol
             lat, lon = latlon
             #alt = float(line[3])
-            cdict[(row, col)] = {"lat": round(lat, 5), "lon": round(lon, 5), "alt": -1}
+            cdict[(row, col)] = {"lat": round(lat, 5), "lon": round(lon, 5), "alt": -9999}
             points.append([lat, lon])
             values.append((row, col))
             #print("row:", row, "col:", col, "clat:", clat, "clon:", clon, "h:", h, "r:", r, "val:", values[i])
@@ -116,7 +115,7 @@ def geo_coord_to_latlon(geo_coord):
     if which == "gk":
         meridian = geo_coord.gk.meridianNo
         if meridian not in geo_coord_to_latlon.gk_cache:
-            geo_coord_to_latlon.gk_cache[meridian] = Proj(init="epsg:" + str(geo_coord_capnp.Geo.EPSG["gk" + str(meridian)]))
+            geo_coord_to_latlon.gk_cache[meridian] = Proj(init="epsg:" + str(geo.Geo.EPSG["gk" + str(meridian)]))
         lon, lat = transform(geo_coord_to_latlon.gk_cache[meridian], wgs84, geo_coord.gk.r, geo_coord.gk.h)
     elif which == "latlon":
         lat, lon = geo_coord.latlon.lat, geo_coord.latlon.lon
@@ -124,7 +123,7 @@ def geo_coord_to_latlon(geo_coord):
         utm_id = str(geo_coord.utm.zone) + geo_coord.utm.latitudeBand
         if meridian not in geo_coord_to_latlon.utm_cache:
             geo_coord_to_latlon.utm_cache[utm_id] = \
-                Proj(init="epsg:" + str(geo_coord_capnp.Geo.EPSG["utm" + utm_id]))
+                Proj(init="epsg:" + str(geo.Geo.EPSG["utm" + utm_id]))
         lon, lat = transform(geo_coord_to_latlon.utm_cache[utm_id], wgs84, geo_coord.utm.r, geo_coord.utm.h)
 
     return lat, lon
@@ -136,47 +135,110 @@ def lat_lon_interpolator(path_to_latlon_to_rowcol_json_file):
     return lat_lon_interpolator.interpol
 
 
-class Station(climate_data2_capnp.Climate.Station.Server):
+def string_to_gcm(gcm_str):
+    if not hasattr(string_to_gcm, "d"):
+        string_to_gcm.d = {
+            "CCCma-CanESM2": cd.Climate.GCM.cccmaCanEsm2,
+            "ICHEC-EC-EARTH": cd.Climate.GCM.ichecEcEarth,
+            "IPSL-IPSL-CM5A-MR": cd.Climate.GCM.ipslIpslCm5AMr,
+            "MIROC-MIROC5": cd.Climate.GCM.mirocMiroc5,
+            "MPI-M-MPI-ESM-LR": cd.Climate.GCM.mpiMMpiEsmLr
+        }
+    return string_to_gcm.d.get(gcm_str, None)
 
-    def __init__(self, sim, id, geo_coord, name=None, description=None):
-        self._sim = sim
-        self._id = id
-        self._name = name if name else id
-        self._description = description if description else ""
-        self._time_series = []
-        self._geo_coord = geo_coord
+def gcm_to_info(gcm):
+    if not hasattr(gcm_to_info, "d"):
+        gcm_to_info.d = {
+            cd.Climate.GCM.cccmaCanEsm2: {"id": "CCCma-CanESM2", "name": "CCCma-CanESM2", "description": ""},
+            cd.Climate.GCM.ichecEcEarth: {"id": "ICHEC-EC-EARTH", "name": "ICHEC-EC-EARTH", "description": ""},
+            cd.Climate.GCM.ipslIpslCm5AMr: {"id": "IPSL-IPSL-CM5A-MR", "name": "IPSL-IPSL-CM5A-MR", "description": ""},
+            cd.Climate.GCM.mirocMiroc5: {"id": "MIROC-MIROC5", "name": "MIROC-MIROC5", "description": ""},
+            cd.Climate.GCM.mpiMMpiEsmLr: {"id": "MPI-M-MPI-ESM-LR", "name": "MPI-M-MPI-ESM-LR", "description": ""}
+        }
+    return gcm_to_info.d.get(gcm.raw, None)
 
-    def info(self, **kwargs): # () -> (info :IdInformation);
-        return common_capnp.Common.IdInformation.new_message(id=self._id, name=self._name, description=self._description) 
 
-    def simulationInfo(self, **kwargs): # () -> (simInfo :IdInformation);
-        return self._sim.info()
+def string_to_rcm(rcm_str):
+    if not hasattr(string_to_rcm, "d"):
+        string_to_rcm.d = {
+            "CLMcom-CCLM4-8-17": cd.Climate.RCM.clmcomCclm4817,
+            "GERICS-REMO2015": cd.Climate.RCM.gericsRemo2015,
+            "KNMI-RACMO22E": cd.Climate.RCM.knmiRacmo22E,
+            "SMHI-RCA4": cd.Climate.RCM.smhiRca4,
+            "CLMcom-BTU-CCLM4-8-17": cd.Climate.RCM.clmcomBtuCclm4817,
+            "MPI-CSC-REMO2009": cd.Climate.RCM.mpiCscRemo2009
+        }
+    return string_to_rcm.d.get(rcm_str, None)
 
-    def heightNN(self, **kwargs): # () -> (heightNN :Int32);
-        return self._geo_coord["alt"]
+def rcm_to_info(rcm):
+    if not hasattr(rcm_to_info, "d"):
+        rcm_to_info.d = {
+            cd.Climate.RCM.clmcomCclm4817: {"id": "CLMcom-CCLM4-8-17", "name": "CLMcom-CCLM4-8-17", "description": ""},
+            cd.Climate.RCM.gericsRemo2015: {"id": "GERICS-REMO2015", "name": "GERICS-REMO2015", "description": ""},
+            cd.Climate.RCM.knmiRacmo22E: {"id": "KNMI-RACMO22E", "name": "KNMI-RACMO22E", "description": ""},
+            cd.Climate.RCM.smhiRca4: {"id": "SMHI-RCA4", "name": "SMHI-RCA4", "description": ""},
+            cd.Climate.RCM.clmcomBtuCclm4817: {"id": "CLMcom-BTU-CCLM4-8-17", "name": "CLMcom-BTU-CCLM4-8-17", "description": ""},
+            cd.Climate.RCM.mpiCscRemo2009: {"id": "MPI-CSC-REMO2009", "name": "MPI-CSC-REMO2009", "description": ""}
+        } 
+    return rcm_to_info.d.get(rcm.raw, None)
 
-    def geoCoord(self, **kwargs): # () -> (geoCoord :Geo.Coord);
-        coord = geo_coord_capnp.Geo.Coord.new_message()
-        coord.init("latlon")
-        coord.latlon.lat = self._geo_coord["lat"]
-        coord.latlon.lon = self._geo_coord["lon"]
-        return coord
-        #return {"gk": {"meridianNo": 5, "r": 1, "h": 2}}
 
-    def allTimeSeries(self, **kwargs): # () -> (allTimeSeries :List(TimeSeries));
-        # get all time series available at this station 
-        
-        if len(self._time_series) == 0:
-            for scen in self._sim.scenarios:
-                for real in scen.realizations:
-                    for ts in real.closest_time_series_at(self._geo_coord["lat"], self._geo_coord["lon"]):
-                        self._time_series.append(ts)
-        
-        return self._time_series
+def string_to_ensmem(ensmem_str):
+    # split r<N>i<M>p<L>
+    sr, sip = ensmem_str[1:].split("i")
+    si, sp = sip.split("p")
+    return {"r": int(sr), "i": int(si), "p": int(sp)}
 
-    def timeSeriesFor(self, scenarioId, realizationId, **kwargs): # (scenarioId :Text, realizationId :Text) -> (timeSeries :TimeSeries);
-        # get all time series for a given scenario and realization at this station
-        return list(filter(lambda ts: ts.scenarioInfo().id == scenarioId and ts.realizationInfo().id == realizationId, self.allTimeSeries()))
+def ensmem_to_info(ensmem):
+    # r<N>i<M>p<L>
+    id = "r{r}i{i}p{p}".format(r=ensmem.r, i=ensmem.i, p=ensmem.p)
+    description = "Realization: #{r}, Initialization: #{i}, Pertubation: #{p}".format(r=ensmem.r, i=ensmem.i, p=ensmem.p)
+    return {"id": id, "name": id, "description": description}
+
+
+def date_to_info(d):
+    iso = d.isoformat()[:10]
+    return {"id": iso, "name": iso, "description": ""}
+
+
+def rcp_or_ssp_to_info_factory(type):
+    fwd_map = {
+        "RCP": cd.Climate.RCP.schema.enumerants,
+        "SSP": cd.Climate.SSP.schema.enumerants
+    }.get(type.upper(), None)
+
+    if not fwd_map:
+        return {"id": "", "name": "", "description": ""}
+
+    rev_map = {}
+    for k, v in fwd_map.items():
+        rev_map[v] = k
+    
+    def to_info(rev_map, xxp):
+        id = rev_map[xxp]
+        name = id[:3].upper() + id[3:]
+        return {"id": id, "name": name, "description": ""}
+
+    return lambda xxp: to_info(rev_map, xxp)
+
+access_entries = {
+    "gcm": lambda e: e.gcm,
+    "rcm": lambda e: e.rcm,
+    "historical": lambda e: True,
+    "rcp": lambda e: e.rcp,
+    "ssp": lambda e: e.ssp,
+    "ensMem": lambda e: e.ensMem,
+    "version": lambda e: e.version,
+    "start": lambda e: create_date(e.start),
+    "end": lambda e: create_date(e.end)
+}
+def create_entry_map(entries):
+    entry_to_value = {}
+    for e in entries:
+        which = e.which()
+        entry_to_value[which] = access_entries[which](e)
+    
+    return entry_to_value
 
 
 def create_date(capnp_date):
@@ -189,9 +251,10 @@ def create_capnp_date(py_date):
         "day": py_date.day if py_date else 0
     }
     
-class TimeSeries(climate_data2_capnp.Climate.TimeSeries.Server): 
 
-    def __init__(self, metadata, path_to_csv=None, dataframe=None):
+class TimeSeries(cd.Climate.TimeSeries.Server): 
+
+    def __init__(self, metadata, location, path_to_csv=None, dataframe=None):
         "a supplied dataframe asumes the correct index is already set (when reading from csv then it will always be 1980 to 2010)"
 
         if not path_to_csv and not dataframe:
@@ -200,14 +263,15 @@ class TimeSeries(climate_data2_capnp.Climate.TimeSeries.Server):
         self._path_to_csv = path_to_csv
         self._df = dataframe
         self._meta = metadata
+        self._location = location
 
     @classmethod
-    def from_csv_file(cls, metadata, path_to_csv):
-        return TimeSeries(metadata, path_to_csv)
+    def from_csv_file(cls, metadata, location, path_to_csv):
+        return TimeSeries(metadata, location, path_to_csv=path_to_csv)
 
     @classmethod
-    def from_dataframe(cls, metadata, dataframe):
-        return TimeSeries(metadata)
+    def from_dataframe(cls, metadata, location, dataframe):
+        return TimeSeries(metadata, location, dataframe=dataframe)
 
     @property
     def dataframe(self):
@@ -224,7 +288,7 @@ class TimeSeries(climate_data2_capnp.Climate.TimeSeries.Server):
         return self._df
 
     def resolution_context(self, context): # -> (resolution :TimeResolution);
-        context.results.resolution = climate_data2_capnp.Climate.TimeSeries.Resolution.daily
+        context.results.resolution = cd.Climate.TimeSeries.Resolution.daily
 
     def range_context(self, context): # -> (startDate :Date, endDate :Date);
         context.results.startDate = create_capnp_date(date.fromisoformat(str(self.dataframe.index[0])[:10]))
@@ -245,25 +309,40 @@ class TimeSeries(climate_data2_capnp.Climate.TimeSeries.Server):
 
         sub_df = self._df.loc[str(from_date):str(to_date)]
 
-        return TimeSeries.from_dataframe(self._real, sub_df)
+        return TimeSeries.from_dataframe(self._real, self._location, sub_df)
 
     def subheader(self, elements, **kwargs): # (elements :List(Element)) -> (timeSeries :TimeSeries);
         sub_headers = [str(e) for e in elements]
         sub_df = self.dataframe.loc[:, sub_headers]
 
-        return TimeSeries.from_dataframew(self._real, sub_df)
+        return TimeSeries.from_dataframew(self._real, self._location, sub_df)
 
-    def metadata(self, **kwargs): # metadata @7 () -> Metadata;
+    def metadata(self, _context, **kwargs): # metadata @7 () -> Metadata;
         "the metadata for this time series"
-        return self._metadata
+        r = _context.results
+        r.init("entries", len(self._meta.entries))
+        for i, e in enumerate(self._meta.entries):
+            r.entries[i] = e
+        r.info = self._meta.info
+
+    def location(self, _context, **kwargs): # location @8 () -> Location;
+        "location of this time series"
+        r = _context.results
+        r.id = self._location.id
+        r.heightNN = self._location.heightNN
+        r.geoCoord = self._location.geoCoord
+        r.timeSeries = self
 
 
-class Dataset(climate_data2_capnp.Climate.Dataset.Server):
+class Dataset(cd.Climate.Dataset.Server):
 
     def __init__(self, metadata, path_to_rows, interpolator):
         self._meta = metadata
         self._path_to_rows = path_to_rows
         self._interpolator = interpolator
+        self._time_series = {}
+        self._locations = {}
+        self._all_locations_created = False
 
     def metadata(self, _context, **kwargs): # metadata @0 () -> Metadata;
         # get metadata for these data 
@@ -272,133 +351,62 @@ class Dataset(climate_data2_capnp.Climate.Dataset.Server):
         for i, e in enumerate(self._meta.entries):
             r.entries[i] = e
         r.info = self._meta.info
-        r.dataset = self._meta.dataset
-
-    def closest_time_series_at(self, lat, lon):
-        row, col = self._interpolator(lat, lon)
-        path_to_csv = self._path_to_rows + "/row-" + str(row) + "/col-" + str(col) + ".csv"
-        closest_timeseries = TimeSeries.from_csv_file(self, path_to_csv)
-        return closest_timeseries
+        
+    def time_series_at(self, row, col, location=None):
+        if (row, col) not in self._time_series:
+            path_to_csv = self._path_to_rows + "/row-" + str(row) + "/col-" + str(col) + ".csv"
+            if not location:
+                location = self.location_at(row, col)
+            time_series = TimeSeries.from_csv_file(self._meta, location, path_to_csv)    
+            self._time_series[(row, col)] = time_series
+        return self._time_series[(row, col)]
 
     def closestTimeSeriesAt(self, geoCoord, **kwargs): # (geoCoord :Geo.Coord) -> (timeSeries :TimeSeries);
         # closest TimeSeries object which represents the whole time series 
         # of the climate realization at the give climate coordinate
         lat, lon = geo_coord_to_latlon(geoCoord)
-        return self.closest_time_series_at(lat, lon)
+        row, col = self._interpolator(lat, lon)
+        return self.time_series_at(row, col)
 
-    def stations(self, **kwargs): # () -> (stations :List(Station));
-        return list([Station(self, "[r:{}/c:{}]".format(row_col[0], row_col[1]), coord) for row_col, coord in cdict.items()])
+    def timeSeriesAt(self, locationId, **kwargs): # (locationId :Text) -> (timeSeries :TimeSeries);
+        rs, cs = locationId.split("/")
+        row = int(rs[2:])
+        col = int(cs[2:])
+        return self.time_series_at(row, col)
 
+    def location_at(self, row, col, coord=None, time_series=None):
+        if (row, col) not in self._locations:
+            if not coord:
+                coord = cdict[(row, col)]
+            id = "r:{}/c:{}".format(row, col)
+            name = "Row/Col:{}/{}|LatLon:{}/{}".format(row, col, coord["lat"], coord["lon"])
+            loc = cd.Climate.Location.new_message(
+                id={"id": id, "name": name, "description": ""},
+                heightNN=coord["alt"],
+                geoCoord={"latlon": {"lat": coord["lat"], "lon": coord["lon"]}},
+            )
+            if time_series:
+                loc.timeSeries = time_series
+            self._locations[(row, col)] = loc
+        return self._locations[(row, col)]
 
-def string_to_gcm(gcm_str):
-    if not hasattr(string_to_gcm, "d"):
-        string_to_gcm.d = {
-            "CCCma-CanESM2": climate_data2_capnp.Climate.GCM.cccmaCanEsm2,
-            "ICHEC-EC-EARTH": climate_data2_capnp.Climate.GCM.ichecEcEarth,
-            "IPSL-IPSL-CM5A-MR": climate_data2_capnp.Climate.GCM.ipslIpslCm5AMr,
-            "MIROC-MIROC5": climate_data2_capnp.Climate.GCM.mirocMiroc5,
-            "MPI-M-MPI-ESM-LR": climate_data2_capnp.Climate.GCM.mpiMMpiEsmLr
-        }
-    return string_to_gcm.d.get(gcm_str, None)
-
-def gcm_to_info(gcm):
-    if not hasattr(gcm_to_info, "d"):
-        gcm_to_info.d = {
-            climate_data2_capnp.Climate.GCM.cccmaCanEsm2: {"id": "CCCma-CanESM2", "name": "CCCma-CanESM2", "description": ""},
-            climate_data2_capnp.Climate.GCM.ichecEcEarth: {"id": "ICHEC-EC-EARTH", "name": "ICHEC-EC-EARTH", "description": ""},
-            climate_data2_capnp.Climate.GCM.ipslIpslCm5AMr: {"id": "IPSL-IPSL-CM5A-MR", "name": "IPSL-IPSL-CM5A-MR", "description": ""},
-            climate_data2_capnp.Climate.GCM.mirocMiroc5: {"id": "MIROC-MIROC5", "name": "MIROC-MIROC5", "description": ""},
-            climate_data2_capnp.Climate.GCM.mpiMMpiEsmLr: {"id": "MPI-M-MPI-ESM-LR", "name": "MPI-M-MPI-ESM-LR", "description": ""}
-        }
-    return gcm_to_info.d.get(gcm.raw, None)
-
-
-def string_to_rcm(rcm_str):
-    if not hasattr(string_to_rcm, "d"):
-        string_to_rcm.d = {
-            "CLMcom-CCLM4-8-17": climate_data2_capnp.Climate.RCM.clmcomCclm4817,
-            "GERICS-REMO2015": climate_data2_capnp.Climate.RCM.gericsRemo2015,
-            "KNMI-RACMO22E": climate_data2_capnp.Climate.RCM.knmiRacmo22E,
-            "SMHI-RCA4": climate_data2_capnp.Climate.RCM.smhiRca4,
-            "CLMcom-BTU-CCLM4-8-17": climate_data2_capnp.Climate.RCM.clmcomBtuCclm4817,
-            "MPI-CSC-REMO2009": climate_data2_capnp.Climate.RCM.mpiCscRemo2009
-        }
-    return string_to_rcm.d.get(rcm_str, None)
-
-def rcm_to_info(rcm):
-    if not hasattr(rcm_to_info, "d"):
-        rcm_to_info.d = {
-            climate_data2_capnp.Climate.RCM.clmcomCclm4817: {"id": "CLMcom-CCLM4-8-17", "name": "CLMcom-CCLM4-8-17", "description": ""},
-            climate_data2_capnp.Climate.RCM.gericsRemo2015: {"id": "GERICS-REMO2015", "name": "GERICS-REMO2015", "description": ""},
-            climate_data2_capnp.Climate.RCM.knmiRacmo22E: {"id": "KNMI-RACMO22E", "name": "KNMI-RACMO22E", "description": ""},
-            climate_data2_capnp.Climate.RCM.smhiRca4: {"id": "SMHI-RCA4", "name": "SMHI-RCA4", "description": ""},
-            climate_data2_capnp.Climate.RCM.clmcomBtuCclm4817: {"id": "CLMcom-BTU-CCLM4-8-17", "name": "CLMcom-BTU-CCLM4-8-17", "description": ""},
-            climate_data2_capnp.Climate.RCM.mpiCscRemo2009: {"id": "MPI-CSC-REMO2009", "name": "MPI-CSC-REMO2009", "description": ""}
-        } 
-    return rcm_to_info.d.get(rcm.raw, None)
+    def locations(self, **kwargs): # locations @2 () -> (locations :List(Location));
+        # all the climate locations this dataset has
+        locs = []
+        if not self._all_locations_created:
+            for row_col, coord in cdict.items():
+                row, col = row_col
+                loc = self.location_at(row, col, coord)
+                ts = self.time_series_at(row, col, loc)
+                loc.timeSeries = ts
+                locs.append(loc)
+            self._all_locations_created = True
+        else:
+            locs.extend(self._locations.values())
+        return locs
 
 
-def string_to_ensmem(ensmem_str):
-    # split r<N>i<M>p<L>
-    sr, sip = ensmem_str[1:].split("i")
-    si, sp = sip.split("p")
-    return {"real": int(sr), "init": int(si), "pert": int(sp)}
-
-def ensmem_to_info(ensmem):
-    # r<N>i<M>p<L>
-    id = "r{r}i{i}p{p}".format(r=ensmem.real, i=ensmem.init, p=ensmem.pert)
-    description = "Realization: #{r}, Initialization: #{i}, Pertubation: #{p}".format(r=ensmem.real, i=ensmem.init, p=ensmem.pert)
-    return {"id": id, "name": id, "description": description}
-
-
-def date_to_info(d):
-    iso = d.isoformat()[:10]
-    return {"id": iso, "name": iso, "description": ""}
-
-
-def rcp_or_ssp_to_info_factory(type):
-    fwd_map = {
-        "RCP": climate_data2_capnp.Climate.RCP.schema.enumerants,
-        "SSP": climate_data2_capnp.Climate.SSP.schema.enumerants
-    }.get(type.upper(), None)
-
-    if not fwd_map:
-        return {"id": "", "name": "", "description": ""}
-
-    rev_map = {}
-    for k, v in fwd_map.items():
-        rev_map[v] = k
-    
-    def to_info(rev_map, xxp):
-        id = rev_map[xxp]
-        name = id[:3].upper() + id[3:]
-        return {"id": id, "name": name, "description": ""}
-
-    return lambda xxp: to_info(rev_map, xxp)
-
-
-def create_entry_map(entries):
-    access_entries = {
-        "gcm": lambda e: e.gcm,
-        "rcm": lambda e: e.rcm,
-        "historical": lambda e: True,
-        "rcp": lambda e: e.rcp,
-        "ssp": lambda e: e.ssp,
-        "ensMem": lambda e: e.ensMem,
-        "version": lambda e: e.version,
-        "start": lambda e: create_date(e.start),
-        "end": lambda e: create_date(e.end)
-    }
-
-    entry_to_value = {}
-    for e in entries:
-        which = e.which()
-        entry_to_value[which] = access_entries[which](e)
-    
-    return entry_to_value
-
-
-class Metadata_Info(climate_data2_capnp.Climate.Metadata.Info.Server):
+class Metadata_Info(cd.Climate.Metadata.Info.Server):
 
     def __init__(self, metadata):
         self._meta = metadata
@@ -431,12 +439,12 @@ class Metadata_Info(climate_data2_capnp.Climate.Metadata.Info.Server):
         for e in self._meta.entries:
             which = e.which()
             value = self._entry_map[which]
-            id_infos.append({"first": e, "second": self._entry_to_info[which](value)})
+            id_infos.append({"fst": e, "snd": self._entry_to_info[which](value)})
         return id_infos
 
 
-def create_metadatasets(path_to_data_dir, interpolator):
-    metadatasets = []
+def create_meta_plus_datasets(path_to_data_dir, interpolator):
+    datasets = []
     for gcm in os.listdir(path_to_data_dir):
         gcm_dir = path_to_data_dir + gcm
         if os.path.isdir(gcm_dir):
@@ -452,7 +460,7 @@ def create_metadatasets(path_to_data_dir, interpolator):
                                     for version in os.listdir(ensmem_dir):
                                         version_dir = ensmem_dir + "/" + version
                                         if os.path.isdir(version_dir):
-                                            metadata = climate_data2_capnp.Climate.Metadata.new_message(
+                                            metadata = cd.Climate.Metadata.new_message(
                                                 entries = [
                                                     {"gcm": string_to_gcm(gcm)},
                                                     {"rcm": string_to_rcm(rcm)},
@@ -462,18 +470,20 @@ def create_metadatasets(path_to_data_dir, interpolator):
                                                 ]
                                             )
                                             metadata.info = Metadata_Info(metadata)
-                                            metadata.dataset = Dataset(metadata, version_dir, interpolator)
-                                            metadatasets.append(metadata)
-    return metadatasets
+                                            datasets.append(cd.Climate.MetaPlusData.new_message(
+                                                meta=metadata, 
+                                                data=Dataset(metadata, version_dir, interpolator)
+                                            ))
+    return datasets
 
 
-class Service(climate_data2_capnp.Climate.Service.Server):
+class Service(cd.Climate.Service.Server):
 
     def __init__(self, path_to_data_dir, interpolator, id=None, name=None, description=None):
         self._id = id if id else "cmip_cordex_reklies"
         self._name = name if name else "CMIP Cordex Reklies"
         self._description = description if description else ""
-        self._metadatasets = create_metadatasets(path_to_data_dir, interpolator)
+        self._meta_plus_datasets = create_meta_plus_datasets(path_to_data_dir, interpolator)
 
     def info(self, _context, **kwargs): # () -> IdInformation;
         r = _context.results
@@ -481,36 +491,23 @@ class Service(climate_data2_capnp.Climate.Service.Server):
         r.name = self._name
         r.description = self._description
 
-    def getAvailableMetadatasets(self, **kwargs): # getAvailableMetadatasets @0 () -> (metadatasets :List(Metadata));
-        return self._metadatasets
+    def getAvailableDatasets(self, **kwargs): # getAvailableDatasets @0 () -> (datasets :List(MetaPlusData));
+        "get a list of all available datasets"
+        return self._meta_plus_datasets
 
-    def getDatasets(self, template, **kwargs): # getDatasets @1 (template :Metadata) -> (datasets :List(Dataset));
-        access_entries = {
-            "gcm": lambda e: e.gcm,
-            "rcm": lambda e: e.rcm,
-            "historical": lambda e: True,
-            "rcp": lambda e: e.rcp,
-            "ssp": lambda e: e.ssp,
-            "ensMem": lambda e: e.ensMem,
-            "version": lambda e: e.version,
-            "start": lambda e: create_date(e.start),
-            "end": lambda e: create_date(e.end)
-        }
-
-        search_entry_to_value = {}
-        for e in template.entries:
-            which = e.which()
-            search_entry_to_value[which] = access_entries[which](e)
+    def getDatasetsFor(self, template, **kwargs): # getDatasets @1 (template :Metadata) -> (datasets :List(Dataset));
+        "get a reference to the simulation with given id"
+        search_entry_to_value = create_entry_map(template.entries)
 
         def contains_search_entries(mds):
-            for e in mds.entries:
+            for e in mds.meta.entries:
                 which = e.which()
                 if which in search_entry_to_value and search_entry_to_value[which] != access_entries[which](e):
                     return False
             return True
 
-        metadatasets = filter(contains_search_entries, self._metadatasets)
-        datasets = map(lambda mds: mds.dataset, metadatasets)
+        meta_plus_datasets = filter(contains_search_entries, self._meta_plus_datasets)
+        datasets = map(lambda mds: mds.data, meta_plus_datasets)
         return list(datasets)
 
 

@@ -10,8 +10,8 @@ import time
 #import common
 import capnp
 capnp.add_import_hook(additional_paths=["../capnproto_schemas/", "../capnproto_schemas/capnp_schemas/"])
-import common_capnp
-import climate_data_capnp
+#import common_capnp as c
+import climate_data_old_capnp as cd
 
 
 def create_date(capnp_date):
@@ -26,7 +26,7 @@ def create_capnp_date(py_date):
     }
 
 
-class CSV_TimeSeries(climate_data_capnp.ClimateData.TimeSeries.Server):
+class CSV_TimeSeries(cd.ClimateData.TimeSeries.Server):
 
     def __init__(self, dataframe=None, path_to_csv_file=None, headers=None, start_date=None, end_date=None):
         if path_to_csv_file:
@@ -41,7 +41,7 @@ class CSV_TimeSeries(climate_data_capnp.ClimateData.TimeSeries.Server):
         #self._real = realization
 
     def resolution_context(self, context): # -> (resolution :TimeResolution);
-        context.results.resolution = climate_data_capnp.ClimateData.TimeResolution.daily
+        context.results.resolution = cd.ClimateData.TimeResolution.daily
 
     def range_context(self, context): # -> (startDate :Date, endDate :Date);
         context.results.startDate = create_capnp_date(self._start_date)
@@ -77,7 +77,7 @@ class CSV_TimeSeries(climate_data_capnp.ClimateData.TimeSeries.Server):
         context.results.timeSeries = CSV_TimeSeries(dataframe=sub_df, headers=sub_headers,
                                                     start_date=self._start_date, end_date=self._end_date)
 
-class List_Tests(climate_data_capnp.ClimateData.ListTests.Server):
+class List_Tests(cd.ClimateData.ListTests.Server):
 
     def __init__(self):
         self.lf32 = list([1 for x in range(1000)])
@@ -106,7 +106,7 @@ class List_Tests(climate_data_capnp.ClimateData.ListTests.Server):
 
 
 
-#class CSV_TimeSeries_CH(climate_data_capnp.ClimateData.Test.Server):
+#class CSV_TimeSeries_CH(cd.ClimateData.Test.Server):
 
 #    def __init__(self, dataframe=None, path_to_csv_file=None, headers=None, start_date=None, end_date=None):
 #        self._ts = CSV_TimeSeries(dataframe=dataframe, path_to_csv_file=path_to_csv_file,
